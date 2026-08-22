@@ -23,7 +23,7 @@ ZenPomo là công cụ đếm giờ Pomodoro chạy trên giao diện dòng lệ
 Người dùng cuối **không cần cài đặt Go hay biên dịch mã nguồn**. Các file thực thi dựng sẵn luôn có sẵn tại mục **[Releases](https://github.com/hieunx1024/ZenPomo/releases)**:
 
 ### 1. Dành cho Windows 10/11 (.exe)
-1. Tải file `zenpomo-windows-amd64.exe` từ mục **Releases**.
+1. Tải file `zenpomo_1.0.0_windows_amd64.exe` từ mục **Releases**.
 2. Đổi tên thành `zenpomo.exe` (hoặc đặt vào thư mục bất kỳ).
 3. **Nhấp đúp chuột để chạy ngay** (hoặc mở qua Windows Terminal / PowerShell: `.\zenpomo.exe`).
 
@@ -35,10 +35,10 @@ sudo dpkg -i zenpomo_1.0.0_linux_amd64.deb
 > Khi cài qua `.deb`, ZenPomo tự động có icon trong Menu Ứng dụng và khay hệ thống (System Tray) tự khởi chạy cùng máy tính.
 
 ### 3. Dành cho các bản Linux khác (Standalone Binary)
-Tải file `zenpomo-linux-amd64` từ mục **Releases**:
+Tải file `zenpomo_1.0.0_linux_amd64` từ mục **Releases**:
 ```bash
-chmod +x zenpomo-linux-amd64
-sudo mv zenpomo-linux-amd64 /usr/local/bin/zenpomo
+chmod +x zenpomo_1.0.0_linux_amd64
+sudo mv zenpomo_1.0.0_linux_amd64 /usr/local/bin/zenpomo
 zenpomo install
 ```
 

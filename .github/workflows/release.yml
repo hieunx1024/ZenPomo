@@ -30,34 +30,40 @@ jobs:
           [ "$VERSION" = "" ] && VERSION="1.0.0"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build Static Linux AMD64 Binary & Debian Package
+      - name: Build All Artifacts
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
           mkdir -p dist
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo-linux-amd64 main.go
+
+          # 1. Linux AMD64 Binary
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo_${VERSION}_linux_amd64 main.go
+
+          # 2. Linux ARM64 Binary
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo_${VERSION}_linux_arm64 main.go
+
+          # 3. Windows AMD64 Executable
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo_${VERSION}_windows_amd64.exe main.go
+
+          # 4. Debian / Ubuntu Package
           make deb VERSION=$VERSION
           mv dist/zenpomo_${VERSION}_amd64.deb dist/zenpomo_${VERSION}_linux_amd64.deb || true
 
-      - name: Build Static Linux ARM64 Binary
-        run: |
-          VERSION=${{ steps.get_version.outputs.VERSION }}
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo-linux-arm64 main.go
-
-      - name: Build Windows AMD64 Executable
-        run: |
-          VERSION=${{ steps.get_version.outputs.VERSION }}
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo-windows-amd64.exe main.go
+          # 5. Generate SHA256 Checksums
+          cd dist
+          sha256sum zenpomo_${VERSION}_* > checksums_${VERSION}.txt
+          cd ..
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          name: ZenPomo Release ${{ github.ref_name }}
+          name: ZenPomo Release v${{ steps.get_version.outputs.VERSION }}
           draft: false
           prerelease: false
           generate_release_notes: true
           files: |
-            dist/zenpomo-linux-amd64
-            dist/zenpomo-linux-arm64
+            dist/zenpomo_${{ steps.get_version.outputs.VERSION }}_windows_amd64.exe
             dist/zenpomo_${{ steps.get_version.outputs.VERSION }}_linux_amd64.deb
-            dist/zenpomo-windows-amd64.exe
+            dist/zenpomo_${{ steps.get_version.outputs.VERSION }}_linux_amd64
+            dist/zenpomo_${{ steps.get_version.outputs.VERSION }}_linux_arm64
+            dist/checksums_${{ steps.get_version.outputs.VERSION }}.txt
