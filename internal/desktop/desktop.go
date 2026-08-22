@@ -203,15 +203,81 @@ func isAutostartLinux() bool {
 }
 
 func installWindows() error {
-	return enableAutostartWindows()
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		home, _ := os.UserHomeDir()
+		localAppData = filepath.Join(home, "AppData", "Local")
+	}
+
+	appDir := filepath.Join(localAppData, "ZenPomo")
+	_ = os.MkdirAll(appDir, 0755)
+
+	targetExe := filepath.Join(appDir, "zenpomo.exe")
+	currExe, err := os.Executable()
+	if err != nil {
+		currExe = "zenpomo.exe"
+	}
+
+	if currExe != targetExe {
+		src, err := os.Open(currExe)
+		if err == nil {
+			defer src.Close()
+			dst, err := os.Create(targetExe)
+			if err == nil {
+				_, _ = io.Copy(dst, src)
+				dst.Close()
+			}
+		}
+	}
+
+	// 1. Create Desktop & Start Menu Shortcuts via PowerShell
+	psScript := fmt.Sprintf(`
+$WshShell = New-Object -comObject WScript.Shell
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$Shortcut1 = $WshShell.CreateShortcut("$Desktop\ZenPomo.lnk")
+$Shortcut1.TargetPath = "%s"
+$Shortcut1.Description = "ZenPomo - Pomodoro Focus Timer"
+$Shortcut1.Save()
+
+$StartMenu = [Environment]::GetFolderPath("Programs")
+$Shortcut2 = $WshShell.CreateShortcut("$StartMenu\ZenPomo.lnk")
+$Shortcut2.TargetPath = "%s"
+$Shortcut2.Description = "ZenPomo - Pomodoro Focus Timer"
+$Shortcut2.Save()
+`, targetExe, targetExe)
+
+	_ = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psScript).Run()
+
+	// 2. Add to User PATH if not already present
+	pathScript := fmt.Sprintf(`
+$target = "%s"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath -notlike "*$target*") {
+    [Environment]::SetEnvironmentVariable("Path", "$userPath;$target", "User")
+}
+`, appDir)
+	_ = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", pathScript).Run()
+
+	// 3. Enable registry autostart for tray
+	_ = exec.Command("reg", "add", `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, "/v", "ZenPomoTray", "/t", "REG_SZ", "/d", fmt.Sprintf("\"%s\" tray", targetExe), "/f").Run()
+
+	return nil
 }
 
 func enableAutostartWindows() error {
-	exe, err := os.Executable()
-	if err != nil {
-		return err
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		home, _ := os.UserHomeDir()
+		localAppData = filepath.Join(home, "AppData", "Local")
 	}
-	cmd := exec.Command("reg", "add", `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, "/v", "ZenPomoTray", "/t", "REG_SZ", "/d", fmt.Sprintf("\"%s\" tray", exe), "/f")
+	targetExe := filepath.Join(localAppData, "ZenPomo", "zenpomo.exe")
+	if _, err := os.Stat(targetExe); os.IsNotExist(err) {
+		if exe, err := os.Executable(); err == nil {
+			targetExe = exe
+		}
+	}
+
+	cmd := exec.Command("reg", "add", `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, "/v", "ZenPomoTray", "/t", "REG_SZ", "/d", fmt.Sprintf("\"%s\" tray", targetExe), "/f")
 	return cmd.Run()
 }
 
