@@ -1,0 +1,20 @@
+# Binaries & build artifacts
+bin/
+dist/
+*.exe
+*.deb
+
+# OS & Editor files
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# AI & Workspace internal agents
+.agents/
+.agents
+
+# Logs & temp
+*.log
+/tmp/
