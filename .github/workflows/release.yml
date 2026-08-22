@@ -23,6 +23,11 @@ jobs:
           go-version: '1.24'
           cache: true
 
+      - name: Install NSIS for Windows Installer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+
       - name: Extract Tag Version
         id: get_version
         run: |
@@ -33,7 +38,7 @@ jobs:
       - name: Build All Artifacts
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
-          mkdir -p dist
+          mkdir -p dist bin
 
           # 1. Linux AMD64 Binary
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo_${VERSION}_linux_amd64 main.go
@@ -41,14 +46,18 @@ jobs:
           # 2. Linux ARM64 Binary
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo_${VERSION}_linux_arm64 main.go
 
-          # 3. Windows AMD64 Executable
+          # 3. Windows AMD64 Executable (Portable)
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/zenpomo_${VERSION}_windows_amd64.exe main.go
+          cp dist/zenpomo_${VERSION}_windows_amd64.exe bin/zenpomo.exe
 
-          # 4. Debian / Ubuntu Package
+          # 4. Windows Setup Installer (.exe) via NSIS
+          makensis -DVERSION=$VERSION packaging/windows/zenpomo.nsi
+
+          # 5. Debian / Ubuntu Package
           make deb VERSION=$VERSION
           mv dist/zenpomo_${VERSION}_amd64.deb dist/zenpomo_${VERSION}_linux_amd64.deb || true
 
-          # 5. Generate SHA256 Checksums
+          # 6. Generate SHA256 Checksums
           cd dist
           sha256sum zenpomo_${VERSION}_* > checksums_${VERSION}.txt
           cd ..
@@ -62,6 +71,7 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
+            dist/zenpomo_${{ steps.get_version.outputs.VERSION }}_windows_setup.exe
             dist/zenpomo_${{ steps.get_version.outputs.VERSION }}_windows_amd64.exe
             dist/zenpomo_${{ steps.get_version.outputs.VERSION }}_linux_amd64.deb
             dist/zenpomo_${{ steps.get_version.outputs.VERSION }}_linux_amd64

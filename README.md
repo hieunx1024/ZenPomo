@@ -22,10 +22,11 @@ ZenPomo là công cụ đếm giờ Pomodoro chạy trên giao diện dòng lệ
 
 Người dùng cuối **không cần cài đặt Go hay biên dịch mã nguồn**. Các file thực thi dựng sẵn luôn có sẵn tại mục **[Releases](https://github.com/hieunx1024/ZenPomo/releases)**:
 
-### 1. Dành cho Windows 10/11 (.exe)
-1. Tải file `zenpomo_1.0.0_windows_amd64.exe` từ mục **Releases**.
-2. Đổi tên thành `zenpomo.exe` (hoặc đặt vào thư mục bất kỳ).
-3. **Nhấp đúp chuột để chạy ngay** (hoặc mở qua Windows Terminal / PowerShell: `.\zenpomo.exe`).
+### 1. Dành cho Windows 10/11
+* **Bộ cài đặt Setup Wizard (.exe)** *(Khuyên dùng)*:
+  Tải file `zenpomo_1.0.0_windows_setup.exe` từ mục **Releases** $\rightarrow$ Nhấp đúp chuột để cài đặt. Trình cài đặt sẽ tự động tạo biểu tượng ngoài **Desktop**, thêm vào **Start Menu**, đăng ký khay hệ thống tự khởi động và hỗ trợ gỡ cài đặt (Uninstall) trong Windows Settings.
+* **Bản Portable chạy ngay**:
+  Tải file `zenpomo_1.0.0_windows_amd64.exe` $\rightarrow$ Đổi tên thành `zenpomo.exe` và nhấp đúp để dùng ngay không cần cài đặt.
 
 ### 2. Dành cho Ubuntu / Debian (.deb)
 Tải file `zenpomo_1.0.0_linux_amd64.deb` từ mục **Releases** và nhấp đúp để cài đặt, hoặc chạy lệnh:
