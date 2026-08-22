@@ -1,42 +1,44 @@
 # ZenPomo
 
-ZenPomo là công cụ đếm giờ Pomodoro chạy trên giao diện dòng lệnh (TUI), tích hợp khay hệ thống (System Tray) và daemon chạy ngầm, hỗ trợ Linux (Ubuntu, Debian, Fedora, Arch) và Windows.
+**English** | [Vietnamese](README.vn.md)
 
-Ứng dụng được thiết kế tối giản theo phong cách công cụ Unix cổ điển, tiêu tốn ít tài nguyên (<15MB RAM), không phụ thuộc runtime bên ngoài (Single Static Binary) và hỗ trợ điều khiển hoàn toàn bằng bàn phím.
+ZenPomo is a lightweight, distraction-free Pomodoro timer featuring a tactile Terminal User Interface (TUI), native System Tray integration, and a background daemon. Built with Go for **Linux** (Ubuntu, Debian, Fedora, Arch) and **Windows 10/11**.
 
----
-
-## Tính năng chính
-
-- **Giao diện TUI:** Thiết kế dạng khối số ASCII dễ quan sát, điều hướng nhanh bằng phím tắt phong cách Vim.
-- **Khay hệ thống (System Tray):** Tích hợp trên thanh trạng thái Ubuntu (GNOME, KDE, Waybar) và Windows Taskbar với menu điều khiển nhanh.
-- **Kiến trúc Daemon ngầm:** Bộ đếm giờ chạy độc lập dưới nền; việc đóng/mở cửa sổ TUI không làm gián đoạn phiên đếm.
-- **Tự động chuyển phiên (Auto-flow):** Tự động chuyển đổi giữa phiên làm việc và giải lao khi hết giờ.
-- **Tích hợp thanh trạng thái / Widget:** Cung cấp lệnh `zenpomo status` hỗ trợ xuất định dạng text hoặc JSON cho Waybar, Polybar, Tmux, hoặc i3/Sway status.
-- **Âm thanh và thông báo Desktop:** Nhúng sẵn file âm thanh offline và gửi thông báo native khi hoàn thành phiên.
-- **Không phụ thuộc thư viện ngoài:** Biên dịch tĩnh hoàn toàn bằng Go (`CGO_ENABLED=0`), không cần cài đặt các gói C/C++ dev headers.
+Consumes minimal system resources (<15MB RAM), requires zero external runtime dependencies (100% pure Go static binary, no CGO), and is fully keyboard-driven.
 
 ---
 
-## Tải về & Cài đặt (Pre-built Binaries)
+## Features
 
-Người dùng cuối **không cần cài đặt Go hay biên dịch mã nguồn**. Các file thực thi dựng sẵn luôn có sẵn tại mục **[Releases](https://github.com/hieunx1024/ZenPomo/releases)**:
+- **Tactile TUI:** Minimalist terminal interface with large ASCII block digits, smooth rendering, and Vim-style key navigation.
+- **Native System Tray:** Lives on the Ubuntu Topbar (GNOME, KDE, Waybar) and Windows Taskbar with dynamic state icons and a quick control menu.
+- **Background Daemon:** The timer runs independently in the background; opening or closing the TUI window never interrupts your active focus session.
+- **Seamless Auto-flow:** Automatically transitions between Work and Break sessions with customizable intervals.
+- **Top Bar & Widget Integration:** Built-in `zenpomo status` command supports both plain text and JSON outputs for **Waybar**, **Polybar**, **Tmux**, **i3/Sway**, or custom scripts.
+- **Offline Audio & Desktop Notifications:** Embedded high-quality audio cues (zero latency, offline) and native desktop notifications on session completion.
+- **Zero-Config & Pure Go:** Built with `CGO_ENABLED=0` without requiring C/C++ development headers (`libappindicator-dev` or `gcc`).
 
-### 1. Dành cho Windows 10/11
-* **Bộ cài đặt Setup Wizard (.exe)** *(Khuyên dùng)*:
-  Tải file `zenpomo_1.0.0_windows_setup.exe` từ mục **Releases** $\rightarrow$ Nhấp đúp chuột để cài đặt. Trình cài đặt sẽ tự động tạo biểu tượng ngoài **Desktop**, thêm vào **Start Menu**, đăng ký khay hệ thống tự khởi động và hỗ trợ gỡ cài đặt (Uninstall) trong Windows Settings.
-* **Bản Portable chạy ngay**:
-  Tải file `zenpomo_1.0.0_windows_amd64.exe` $\rightarrow$ Đổi tên thành `zenpomo.exe` và nhấp đúp để dùng ngay không cần cài đặt.
+---
 
-### 2. Dành cho Ubuntu / Debian (.deb)
-Tải file `zenpomo_1.0.0_linux_amd64.deb` từ mục **Releases** và nhấp đúp để cài đặt, hoặc chạy lệnh:
+## Downloads & Installation
+
+Pre-built binaries are available on the **[Releases](https://github.com/hieunx1024/ZenPomo/releases)** page.
+
+### 1. Windows 10/11
+* **Windows Setup Wizard (.exe)** *(Recommended)*:  
+  Download `zenpomo_1.0.0_windows_setup.exe` $\rightarrow$ Double-click to install. Automatically creates Desktop and Start Menu shortcuts, configures background tray startup, and registers with Windows Add/Remove Programs.
+* **Portable Binary (.exe)**:  
+  Download `zenpomo_1.0.0_windows_amd64.exe` $\rightarrow$ Rename to `zenpomo.exe` and run directly.
+
+### 2. Ubuntu / Debian (.deb)
+Download `zenpomo_1.0.0_linux_amd64.deb` and double-click to install, or run:
 ```bash
 sudo dpkg -i zenpomo_1.0.0_linux_amd64.deb
 ```
-> Khi cài qua `.deb`, ZenPomo tự động có icon trong Menu Ứng dụng và khay hệ thống (System Tray) tự khởi chạy cùng máy tính.
+> The `.deb` package automatically adds ZenPomo to your Applications Menu and enables background System Tray autostart on login.
 
-### 3. Dành cho các bản Linux khác (Standalone Binary)
-Tải file `zenpomo_1.0.0_linux_amd64` từ mục **Releases**:
+### 3. Generic Linux (Standalone Binary)
+Download `zenpomo_1.0.0_linux_amd64`:
 ```bash
 chmod +x zenpomo_1.0.0_linux_amd64
 sudo mv zenpomo_1.0.0_linux_amd64 /usr/local/bin/zenpomo
@@ -45,65 +47,65 @@ zenpomo install
 
 ---
 
-## Cài đặt từ mã nguồn (Dành cho Lập trình viên)
+## Building from Source
 
-Yêu cầu: Go 1.22 trở lên.
+Requires **Go 1.22+**.
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/hieunx1024/ZenPomo.git
 cd ZenPomo
 
-# Biên dịch và tự động cài đặt vào hệ thống
+# Build and install to local environment
 make install
 ```
 
-Hoặc biên dịch thủ công ra các nền tảng:
+Or build specific targets manually:
 ```bash
-make build-linux      # Biên dịch cho Linux
-make build-windows    # Biên dịch file .exe cho Windows
-make deb              # Đóng gói file .deb cho Ubuntu/Debian
-make build-all        # Biên dịch tất cả
+make build-linux      # Build Linux binary (bin/zenpomo)
+make build-windows    # Build Windows executable (bin/zenpomo.exe)
+make deb              # Build Debian package (dist/zenpomo_1.0.0_amd64.deb)
+make build-all        # Build all targets
 ```
 
 ---
 
-## Sử dụng
+## Usage
 
-### Khởi chạy giao diện chính
+### Launching the Interface
 
 ```bash
-# Mở giao diện TUI
+# Open full-screen TUI
 zenpomo
 
-# Hoặc mở trực tiếp bảng Cấu hình (Settings)
+# Open directly into Configuration Settings modal
 zenpomo config
 ```
 
-### Điều khiển qua dòng lệnh (CLI)
+### Command Line Interface (CLI)
 
 ```bash
-zenpomo start       # Bắt đầu đếm
-zenpomo pause       # Tạm dừng
-zenpomo skip        # Chuyển sang phiên tiếp theo
-zenpomo reset       # Đặt lại phiên hiện tại
-zenpomo stop        # Dừng hoàn toàn tiến trình ngầm
-zenpomo toggle      # Bật / ẩn nhanh cửa sổ TUI
+zenpomo start       # Start the timer
+zenpomo pause       # Pause the timer
+zenpomo skip        # Advance to the next session
+zenpomo reset       # Reset current session
+zenpomo stop        # Stop background daemon completely
+zenpomo toggle      # Toggle (show/hide) the TUI window
 ```
 
-### Tích hợp Waybar / Polybar / Tmux
+### Waybar / Polybar / Tmux Integration
 
-Lệnh `zenpomo status` cho phép các thanh trạng thái đọc dữ liệu đếm giờ theo thời gian thực:
+Use `zenpomo status` to output live countdown data:
 
 ```bash
-# Xuất dạng text: [24:35] [Work: Running] | Task: General Focus
+# Plain text output: [24:35] [Work: Running] | Task: General Focus
 zenpomo status
 
-# Xuất dạng JSON (dùng cho module Waybar / custom script)
+# JSON output (for Waybar / custom status bar scripts)
 zenpomo status --format json
 ```
 
-Ví dụ cấu hình cho Waybar (`~/.config/waybar/config`):
+Example Waybar configuration (`~/.config/waybar/config`):
 
 ```json
 "custom/zenpomo": {
@@ -114,47 +116,47 @@ Ví dụ cấu hình cho Waybar (`~/.config/waybar/config`):
 }
 ```
 
-### Quản lý tự khởi động khay hệ thống (Autostart)
+### Managing System Tray Autostart
 
 ```bash
-zenpomo autostart enable     # Bật tự chạy cùng hệ thống
-zenpomo autostart disable    # Tắt tự chạy
-zenpomo autostart status     # Kiểm tra trạng thái
+zenpomo autostart enable     # Enable startup on login
+zenpomo autostart disable    # Disable startup
+zenpomo autostart status     # Check autostart status
 ```
 
 ---
 
-## Bảng phím tắt TUI
+## Keybindings
 
-| Phím | Chức năng |
+| Key | Action |
 | :--- | :--- |
-| `Space` | Bắt đầu / Tạm dừng (Start / Pause) |
-| `n` | Bỏ qua và chuyển sang phiên tiếp theo (Skip) |
-| `r` | Đặt lại phiên hiện tại (Reset) |
-| `c` | Mở bảng Cấu hình thời gian (Settings) |
-| `a` | Thêm công việc mới vào danh sách (Add Task) |
-| `d` | Đánh dấu hoàn thành / Chưa hoàn thành (Toggle Done) |
-| `x` | Xóa công việc đã chọn (Delete Task) |
-| `Enter` | Chọn công việc hiện tại làm công việc đếm giờ |
-| `j` / `↓` | Di chuyển xuống công việc bên dưới |
-| `k` / `↑` | Di chuyển lên công việc bên trên |
-| `m` | Bật / Tắt âm thanh thông báo |
-| `q` / `Ctrl+C` | Đóng TUI (bộ đếm và khay hệ thống vẫn chạy ngầm) |
+| `Space` | Start / Pause timer |
+| `n` | Skip / Advance to next session |
+| `r` | Reset current session timer |
+| `c` | Open Configuration Settings modal |
+| `a` | Add new task to todo list |
+| `d` | Toggle task completion (Done / Undone) |
+| `x` | Delete selected task |
+| `Enter` | Set selected task as active timer task |
+| `j` / `↓` | Move selection down |
+| `k` / `↑` | Move selection up |
+| `m` | Toggle audio cues (Mute / Unmute) |
+| `q` / `Ctrl+C` | Close TUI (daemon and tray continue running) |
 
 ---
 
-## Phím tắt toàn hệ thống (Global Hotkey trên Ubuntu)
+## Global Hotkey (Ubuntu / GNOME)
 
-Để bật/ẩn nhanh cửa sổ ZenPomo bằng phím tắt từ bất kỳ đâu:
+To toggle ZenPomo instantly with a system-wide hotkey:
 
-1. Mở **Settings** $\rightarrow$ **Keyboard** $\rightarrow$ **Keyboard Shortcuts** $\rightarrow$ **Custom Shortcuts**.
-2. Thêm phím tắt mới:
-   - **Tên:** `ZenPomo Toggle`
-   - **Lệnh:** `zenpomo toggle`
-   - **Phím tắt:** `Ctrl + Alt + P` (hoặc phím tùy chọn).
+1. Go to **Settings** $\rightarrow$ **Keyboard** $\rightarrow$ **Keyboard Shortcuts** $\rightarrow$ **Custom Shortcuts**.
+2. Add a new shortcut:
+   - **Name:** `ZenPomo Toggle`
+   - **Command:** `zenpomo toggle`
+   - **Shortcut:** `Ctrl + Alt + P` (or your preferred key combination).
 
 ---
 
-## Giấy phép (License)
+## License
 
-Dự án được phát hành theo giấy phép [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
