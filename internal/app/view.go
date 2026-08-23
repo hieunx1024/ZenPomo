@@ -59,7 +59,7 @@ var (
 )
 
 // makeBox creates a rounded border box whose TOTAL outer width matches totalWidth exactly.
-func makeBox(totalWidth, totalHeight int, content string) string {
+func makeBox(totalWidth, totalHeight int, align lipgloss.Position, content string) string {
 	if totalWidth < 10 {
 		totalWidth = 10
 	}
@@ -72,7 +72,8 @@ func makeBox(totalWidth, totalHeight int, content string) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorBorder).
 		Padding(0, 1).
-		Width(innerWidth)
+		Width(innerWidth).
+		Align(align)
 
 	if totalHeight > 2 {
 		innerHeight := totalHeight - 2
@@ -198,7 +199,7 @@ func (m Model) View() string {
 			progressBar+"  "+lipgloss.NewStyle().Foreground(colorTextDim).Render(cycleInfo),
 		)
 	}
-	clockBox := makeBox(contentWidth, 0, clockBoxContent)
+	clockBox := makeBox(contentWidth, 0, lipgloss.Center, clockBoxContent)
 
 	// Lower Section: Responsive Task & Stats Layout
 	var lowerSection string
@@ -217,7 +218,7 @@ func (m Model) View() string {
 		lowerSection = lipgloss.JoinVertical(lipgloss.Left, taskBox, statsBox)
 	} else {
 		// Two Columns Side-by-Side
-		taskWidth := int(float64(contentWidth) * 0.60)
+		taskWidth := int(float64(contentWidth) * 0.55)
 		statsWidth := contentWidth - taskWidth - 1
 
 		clockHeight := lipgloss.Height(clockBox)
@@ -278,7 +279,7 @@ func (m Model) renderTooSmallView(termW, termH int) string {
 	content.WriteString(fmt.Sprintf("Required: %d x %d (min)\n\n", MinTerminalWidth, MinTerminalHeight))
 	content.WriteString(lipgloss.NewStyle().Foreground(colorTextDim).Render("Please enlarge your terminal window."))
 
-	box := makeBox(boxWidth, 0, content.String())
+	box := makeBox(boxWidth, 0, lipgloss.Center, content.String())
 
 	return lipgloss.Place(
 		termW,
@@ -346,7 +347,7 @@ func (m Model) renderTaskBox(width, height int) string {
 		taskListContent.WriteString("\n" + lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Render("New: ") + m.textInput.View())
 	}
 
-	return makeBox(width, height, taskListContent.String())
+	return makeBox(width, height, lipgloss.Left, taskListContent.String())
 }
 
 func (m Model) renderStatsBox(width, height int) string {
@@ -364,13 +365,16 @@ func (m Model) renderStatsBox(width, height int) string {
 	statsContent.WriteString(fmt.Sprintf("Sound [m]:  %s\n", lipgloss.NewStyle().Foreground(colorTextDim).Render(soundStatus)))
 
 	activeName := m.snapshot.ActiveTaskTitle
-	maxActiveLen := width - 12
-	if maxActiveLen > 5 && len(activeName) > maxActiveLen {
+	maxActiveLen := width - 18
+	if maxActiveLen < 5 {
+		maxActiveLen = 5
+	}
+	if len(activeName) > maxActiveLen {
 		activeName = activeName[:maxActiveLen-3] + "..."
 	}
 	statsContent.WriteString(fmt.Sprintf("Active:     %s", lipgloss.NewStyle().Foreground(colorActiveTask).Render(activeName)))
 
-	return makeBox(width, height, statsContent.String())
+	return makeBox(width, height, lipgloss.Left, statsContent.String())
 }
 
 func (m Model) renderConfigModal(termW, termH int) string {
@@ -411,7 +415,7 @@ func (m Model) renderConfigModal(termW, termH int) string {
 	content.WriteString("\n" + lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("-", modalWidth-6)) + "\n")
 	content.WriteString(lipgloss.NewStyle().Foreground(colorTextDim).Render("[j/k] Select   [h/l hoặc +/-] Adjust   [Space] Toggle\n[Enter / Esc / c] Save & Close"))
 
-	modal := makeBox(modalWidth, 0, content.String())
+	modal := makeBox(modalWidth, 0, lipgloss.Left, content.String())
 
 	return lipgloss.Place(
 		termW,

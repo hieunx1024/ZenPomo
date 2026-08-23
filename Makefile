@@ -1,7 +1,7 @@
 .PHONY: build test clean build-all build-linux build-windows install deb release-package
 
 BINARY_NAME=zenpomo
-VERSION=1.0.0
+VERSION=1.0.1
 BIN_DIR=bin
 DIST_DIR=dist
 INSTALL_DIR=$(HOME)/.local/bin
@@ -27,6 +27,7 @@ build-all: build-linux build-windows
 
 install: build-linux
 	@mkdir -p $(INSTALL_DIR) $(APP_DIR) $(AUTOSTART_DIR) $(ICON_DIR) $(PIXMAPS_DIR)
+	@rm -f $(INSTALL_DIR)/$(BINARY_NAME)
 	@cp $(BIN_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
 	@chmod +x $(INSTALL_DIR)/$(BINARY_NAME)
 	@cp assets/icons/tomato.png $(ICON_DIR)/zenpomo.png
