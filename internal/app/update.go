@@ -22,15 +22,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.client != nil {
 			if resp, err := m.client.SendTUICommand(daemon.CmdGetStatus); err == nil {
 				m.snapshot = resp.Snapshot
+				m.todayStats = resp.Stats
+				m.tasks = resp.Tasks
 				if resp.RequestedMode == "config" {
 					if cfg, err := m.client.GetConfig(); err == nil {
 						m.config = cfg
 					}
 					m.inputMode = ModeConfig
 				}
+			} else if m.store != nil {
+				m.todayStats = m.store.GetTodayStats()
+				m.tasks = m.store.GetTasks()
 			}
-		}
-		if m.store != nil {
+		} else if m.store != nil {
+			m.todayStats = m.store.GetTodayStats()
 			m.tasks = m.store.GetTasks()
 		}
 		return m, doTick()
@@ -48,6 +53,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if val != "" && m.store != nil {
 					task := m.store.AddTask(val, 1)
 					m.tasks = m.store.GetTasks()
+					m.todayStats = m.store.GetTodayStats()
 					if m.snapshot.ActiveTaskTitle == "General Focus" || m.snapshot.ActiveTaskTitle == "" {
 						_, _ = m.client.SendCommand(daemon.CmdSetTask, task.Title)
 					}
@@ -177,6 +183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.store != nil {
 					m.store.ToggleTask(task.ID)
 					m.tasks = m.store.GetTasks()
+					m.todayStats = m.store.GetTodayStats()
 				}
 			}
 			return m, nil

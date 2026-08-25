@@ -149,10 +149,22 @@ func (s *Server) executeCommand(req Request) Response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	makeResp := func(success bool, msg string, mode string) Response {
+		return Response{
+			Success:       success,
+			Message:       msg,
+			Snapshot:      s.timer.Snapshot(),
+			Config:        s.timer.GetConfig(),
+			Stats:         s.store.GetTodayStats(),
+			Tasks:         s.store.GetTasks(),
+			RequestedMode: mode,
+		}
+	}
+
 	switch req.Command {
 	case CmdRequestConfig:
 		s.pendingMode = "config"
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdGetStatus, CmdPing:
 		var mode string
@@ -160,10 +172,10 @@ func (s *Server) executeCommand(req Request) Response {
 			mode = s.pendingMode
 			s.pendingMode = ""
 		}
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig(), RequestedMode: mode}
+		return makeResp(true, "", mode)
 
 	case CmdGetConfig:
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdUpdateConfig:
 		if req.Config != nil {
@@ -171,38 +183,38 @@ func (s *Server) executeCommand(req Request) Response {
 			s.store.UpdateConfig(*req.Config)
 			s.audio.SetEnabled(req.Config.SoundEnabled)
 		}
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdToggle:
 		s.timer.Toggle()
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdStart:
 		s.timer.Start()
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdPause:
 		s.timer.Pause()
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdReset:
 		s.timer.Reset()
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdSkip:
 		s.timer.Skip()
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdSetTask:
 		s.timer.SetTask(req.Payload)
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdToggleSound:
 		enabled := s.timer.ToggleSound()
 		s.audio.SetEnabled(enabled)
 		cfg := s.timer.GetConfig()
 		s.store.UpdateConfig(cfg)
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: cfg}
+		return makeResp(true, "", "")
 
 	case CmdSwitchSession:
 		var target core.SessionType
@@ -216,7 +228,7 @@ func (s *Server) executeCommand(req Request) Response {
 		}
 		s.timer.SwitchSession(target)
 		s.timer.Start()
-		return Response{Success: true, Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(true, "", "")
 
 	case CmdStop:
 		go func() {
@@ -227,6 +239,6 @@ func (s *Server) executeCommand(req Request) Response {
 		return Response{Success: true, Message: "Daemon stopping"}
 
 	default:
-		return Response{Success: false, Message: "Unknown command", Snapshot: s.timer.Snapshot(), Config: s.timer.GetConfig()}
+		return makeResp(false, "Unknown command", "")
 	}
 }

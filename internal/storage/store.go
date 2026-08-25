@@ -68,14 +68,11 @@ func NewStore(customPath ...string) (*Store, error) {
 		},
 	}
 
-	_ = s.load() // if file doesn't exist yet, default is used
+	_ = s.Reload() // if file doesn't exist yet, default is used
 	return s, nil
 }
 
-func (s *Store) load() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *Store) loadLocked() error {
 	b, err := os.ReadFile(s.filePath)
 	if err != nil {
 		return err
@@ -93,11 +90,7 @@ func (s *Store) load() error {
 	return nil
 }
 
-// Save writes current in-memory state to the JSON file atomically.
-func (s *Store) Save() error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+func (s *Store) saveLocked() error {
 	b, err := json.MarshalIndent(s.data, "", "  ")
 	if err != nil {
 		return err
@@ -110,26 +103,53 @@ func (s *Store) Save() error {
 	return os.Rename(tmpPath, s.filePath)
 }
 
+// Reload forces a fresh read of the JSON file from disk into memory.
+func (s *Store) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadLocked()
+}
+
+// Save writes current in-memory state to the JSON file atomically.
+func (s *Store) Save() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveLocked()
+}
+
 // UpdateConfig updates and persists new configuration.
 func (s *Store) UpdateConfig(cfg core.Config) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
 	s.data.Config = cfg
-	s.mu.Unlock()
-	_ = s.Save()
+	_ = s.saveLocked()
 }
 
-// GetTasks returns a copy of all tasks.
+// GetTasks returns a copy of all tasks, with uncompleted tasks first and completed tasks last.
 func (s *Store) GetTasks() []Task {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	res := make([]Task, len(s.data.Tasks))
-	copy(res, s.data.Tasks)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
+	res := make([]Task, 0, len(s.data.Tasks))
+	for _, t := range s.data.Tasks {
+		if !t.IsDone {
+			res = append(res, t)
+		}
+	}
+	for _, t := range s.data.Tasks {
+		if t.IsDone {
+			res = append(res, t)
+		}
+	}
 	return res
 }
 
 // AddTask appends a new task to the queue.
 func (s *Store) AddTask(title string, target int) Task {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
 	if target <= 0 {
 		target = 1
 	}
@@ -142,14 +162,15 @@ func (s *Store) AddTask(title string, target int) Task {
 		CreatedAt: time.Now(),
 	}
 	s.data.Tasks = append(s.data.Tasks, task)
-	s.mu.Unlock()
-	_ = s.Save()
+	_ = s.saveLocked()
 	return task
 }
 
 // ToggleTask flips the completed status of a task.
 func (s *Store) ToggleTask(id string) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
 	today := time.Now().Format("2006-01-02")
 	stat := s.data.Stats[today]
 	stat.Date = today
@@ -168,14 +189,15 @@ func (s *Store) ToggleTask(id string) bool {
 		}
 	}
 	s.data.Stats[today] = stat
-	s.mu.Unlock()
-	_ = s.Save()
+	_ = s.saveLocked()
 	return toggled
 }
 
 // DeleteTask removes a task by ID.
 func (s *Store) DeleteTask(id string) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
 	newList := make([]Task, 0, len(s.data.Tasks))
 	for _, t := range s.data.Tasks {
 		if t.ID != id {
@@ -183,13 +205,14 @@ func (s *Store) DeleteTask(id string) {
 		}
 	}
 	s.data.Tasks = newList
-	s.mu.Unlock()
-	_ = s.Save()
+	_ = s.saveLocked()
 }
 
 // IncrementPomo increments pomo count for today and active task if any.
 func (s *Store) IncrementPomo(taskTitle string, minutes int) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
 	today := time.Now().Format("2006-01-02")
 	stat := s.data.Stats[today]
 	stat.Date = today
@@ -208,14 +231,14 @@ func (s *Store) IncrementPomo(taskTitle string, minutes int) {
 	}
 
 	s.data.Stats[today] = stat
-	s.mu.Unlock()
-	_ = s.Save()
+	_ = s.saveLocked()
 }
 
 // GetTodayStats returns metrics for the current day.
 func (s *Store) GetTodayStats() DailyStats {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
 	today := time.Now().Format("2006-01-02")
 	if stat, ok := s.data.Stats[today]; ok {
 		return stat
@@ -225,7 +248,8 @@ func (s *Store) GetTodayStats() DailyStats {
 
 // GetConfig returns a copy of the timer configuration.
 func (s *Store) GetConfig() core.Config {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
 	return s.data.Config
 }

@@ -24,6 +24,7 @@ type Model struct {
 	client       *daemon.Client
 	store        *storage.Store
 	snapshot     core.SessionSnapshot
+	todayStats   storage.DailyStats
 	config       core.Config
 	configCursor int
 	tasks        []storage.Task
@@ -53,7 +54,7 @@ func NewModel(initialMode ...InputMode) Model {
 	ti := textinput.New()
 	ti.Placeholder = "Enter task title..."
 	ti.CharLimit = 50
-	ti.Width = 35
+	ti.Width = 48
 
 	snap, _ := client.GetSnapshot()
 	cfg := core.DefaultConfig()
@@ -67,8 +68,10 @@ func NewModel(initialMode ...InputMode) Model {
 	}
 
 	tasks := []storage.Task{}
+	var stats storage.DailyStats
 	if store != nil {
 		tasks = store.GetTasks()
+		stats = store.GetTodayStats()
 	}
 
 	mode := ModeNormal
@@ -80,6 +83,7 @@ func NewModel(initialMode ...InputMode) Model {
 		client:       client,
 		store:        store,
 		snapshot:     snap,
+		todayStats:   stats,
 		config:       cfg,
 		configCursor: 0,
 		tasks:        tasks,

@@ -1,6 +1,9 @@
 package daemon
 
-import "zenpomo/internal/core"
+import (
+	"zenpomo/internal/core"
+	"zenpomo/internal/storage"
+)
 
 // Command constants for IPC.
 const (
@@ -35,5 +38,7 @@ type Response struct {
 	Message       string               `json:"message,omitempty"`
 	Snapshot      core.SessionSnapshot `json:"snapshot"`
 	Config        core.Config          `json:"config"`
+	Stats         storage.DailyStats   `json:"stats"`
+	Tasks         []storage.Task       `json:"tasks,omitempty"`
 	RequestedMode string               `json:"requested_mode,omitempty"`
 }

@@ -23,7 +23,7 @@ var statusCmd = &cobra.Command{
 			_ = client.EnsureDaemon()
 		}
 
-		snap, err := client.GetSnapshot()
+		resp, err := client.SendCommand(daemon.CmdGetStatus)
 		if err != nil {
 			if formatFlag == "json" {
 				fmt.Println(`{"status": "offline", "time": "00:00"}`)
@@ -33,6 +33,7 @@ var statusCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
+		snap := resp.Snapshot
 		mins := snap.RemainingSeconds / 60
 		secs := snap.RemainingSeconds % 60
 		timeStr := fmt.Sprintf("%02d:%02d", mins, secs)
@@ -47,11 +48,14 @@ var statusCmd = &cobra.Command{
 				"progress":          snap.ProgressRatio,
 				"active_task":       snap.ActiveTaskTitle,
 				"cycle":             snap.CycleCount,
+				"pomos_done":        resp.Stats.CompletedPomos,
+				"focus_minutes":     resp.Stats.FocusMinutes,
+				"tasks_done":        resp.Stats.CompletedTasks,
 			}
 			b, _ := json.Marshal(data)
 			fmt.Println(string(b))
 		} else {
-			fmt.Printf("[%s] [%s: %s] | Task: %s\n", timeStr, snap.Session, snap.State, snap.ActiveTaskTitle)
+			fmt.Printf("[%s] [%s: %s] | Task: %s | Pomos: %d (%dm)\n", timeStr, snap.Session, snap.State, snap.ActiveTaskTitle, resp.Stats.CompletedPomos, resp.Stats.FocusMinutes)
 		}
 	},
 }

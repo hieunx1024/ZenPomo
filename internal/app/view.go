@@ -115,10 +115,13 @@ func (m Model) View() string {
 		sessionColor = colorBreak
 	}
 
-	// Calculate maximum content width (clamped to termW - 2, max 78)
-	contentWidth := termW - 2
-	if contentWidth > 76 {
-		contentWidth = 76
+	// Calculate responsive content width (scales comfortably with terminal width, up to 104 on wide/fullscreen displays)
+	contentWidth := termW - 4
+	if contentWidth > 104 {
+		contentWidth = 104
+	}
+	if contentWidth < MinTerminalWidth {
+		contentWidth = MinTerminalWidth
 	}
 
 	// Header (Compact 1 line)
@@ -141,12 +144,12 @@ func (m Model) View() string {
 	)
 
 	// Progress Bar
-	barWidth := contentWidth - 18
+	barWidth := contentWidth - 24
 	if barWidth < 10 {
 		barWidth = 10
 	}
-	if barWidth > 42 {
-		barWidth = 42
+	if barWidth > 56 {
+		barWidth = 56
 	}
 
 	completedWidth := int(m.snapshot.ProgressRatio * float64(barWidth))
@@ -218,7 +221,7 @@ func (m Model) View() string {
 		lowerSection = lipgloss.JoinVertical(lipgloss.Left, taskBox, statsBox)
 	} else {
 		// Two Columns Side-by-Side
-		taskWidth := int(float64(contentWidth) * 0.55)
+		taskWidth := int(float64(contentWidth) * 0.58)
 		statsWidth := contentWidth - taskWidth - 1
 
 		clockHeight := lipgloss.Height(clockBox)
@@ -323,7 +326,7 @@ func (m Model) renderTaskBox(width, height int) string {
 			}
 
 			title := t.Title
-			maxTitleLen := width - 18
+			maxTitleLen := width - 15
 			if maxTitleLen > 5 && len(title) > maxTitleLen {
 				title = title[:maxTitleLen-3] + "..."
 			}
@@ -351,7 +354,10 @@ func (m Model) renderTaskBox(width, height int) string {
 }
 
 func (m Model) renderStatsBox(width, height int) string {
-	todayStats := m.store.GetTodayStats()
+	todayStats := m.todayStats
+	if todayStats.Date == "" && m.store != nil {
+		todayStats = m.store.GetTodayStats()
+	}
 	soundStatus := "ON"
 	if !m.snapshot.SoundEnabled {
 		soundStatus = "OFF"
@@ -365,7 +371,7 @@ func (m Model) renderStatsBox(width, height int) string {
 	statsContent.WriteString(fmt.Sprintf("Sound [m]:  %s\n", lipgloss.NewStyle().Foreground(colorTextDim).Render(soundStatus)))
 
 	activeName := m.snapshot.ActiveTaskTitle
-	maxActiveLen := width - 18
+	maxActiveLen := width - 13
 	if maxActiveLen < 5 {
 		maxActiveLen = 5
 	}
