@@ -20,6 +20,9 @@ const (
 	CmdToggleTUI     = "TOGGLE_TUI"
 	CmdSwitchSession = "SWITCH_SESSION"
 	CmdRequestConfig = "REQUEST_CONFIG"
+	CmdRequestTimer  = "REQUEST_TIMER"
+	CmdSwitchTab     = "SWITCH_TAB"
+	CmdIsTUIActive   = "IS_TUI_ACTIVE"
 	CmdPing          = "PING"
 	CmdStop          = "STOP"
 )

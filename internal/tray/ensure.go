@@ -2,12 +2,14 @@ package tray
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"zenpomo/internal/core"
 	"zenpomo/internal/daemon"
 )
 
@@ -28,6 +30,15 @@ func IsTrayRunning() bool {
 			pid, err := strconv.Atoi(entry.Name())
 			if err != nil || pid == currentPid {
 				continue
+			}
+
+			// Check if process is a zombie
+			statBytes, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+			if err == nil {
+				fields := strings.Fields(string(statBytes))
+				if len(fields) >= 3 && (fields[2] == "Z" || fields[2] == "X") {
+					continue
+				}
 			}
 
 			cmdlineBytes, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "cmdline"))
@@ -57,15 +68,13 @@ func EnsureTray() {
 		return
 	}
 
-	exe, err := os.Executable()
-	if err != nil {
-		exe = "zenpomo"
-	}
+	exe := core.GetExecutable()
 
 	cmd := exec.Command(exe, "tray")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Stdin = nil
+	cmd.Env = os.Environ()
 
 	daemon.SetDetachedProcess(cmd)
 

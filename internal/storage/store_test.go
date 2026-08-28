@@ -121,3 +121,66 @@ func TestStore_TaskSorting(t *testing.T) {
 		t.Fatalf("expected completed task at the end, got: %+v", tasks[2])
 	}
 }
+
+func TestStore_AdvancedTaskFeatures(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "zenpomo-adv-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "data.json")
+	store, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	// 1. Tag & Estimate Parsing
+	title, est, tags := ParseTaskInput("Refactor API #backend #core est:4")
+	if title != "Refactor API" || est != 4 || len(tags) != 2 || tags[0] != "backend" || tags[1] != "core" {
+		t.Fatalf("ParseTaskInput failed, got title=%q, est=%d, tags=%v", title, est, tags)
+	}
+
+	// 2. Add with automatic parsing
+	taskA := store.AddTask("Implement Auth #security est:3", 1)
+	if taskA.Title != "Implement Auth" || taskA.Target != 3 || len(taskA.Tags) != 1 || taskA.Tags[0] != "security" {
+		t.Fatalf("AddTask parsed incorrectly: %+v", taskA)
+	}
+
+	taskB := store.AddTask("Write Docs #docs (2)", 1)
+	if taskB.Target != 2 || len(taskB.Tags) != 1 {
+		t.Fatalf("AddTask with parenthesis parsed incorrectly: %+v", taskB)
+	}
+
+	// 3. Edit task
+	edited := store.EditTask(taskA.ID, "Implement OAuth2 #security #auth est:5")
+	if !edited {
+		t.Fatalf("expected EditTask to succeed")
+	}
+	tasks := store.GetTasks()
+	if tasks[0].Title != "Implement OAuth2" || tasks[0].Target != 5 || len(tasks[0].Tags) != 2 {
+		t.Fatalf("EditTask did not update correctly: %+v", tasks[0])
+	}
+
+	// 4. Reorder tasks
+	reordered := store.ReorderTask(0, 1)
+	if !reordered {
+		t.Fatalf("expected ReorderTask to succeed")
+	}
+	tasks = store.GetTasks()
+	if tasks[0].ID != taskB.ID {
+		t.Fatalf("expected taskB to be first after reorder, got: %+v", tasks[0])
+	}
+
+	// 5. Clear completed
+	store.ToggleTask(taskB.ID)
+	cleared := store.ClearCompleted()
+	if cleared != 1 {
+		t.Fatalf("expected 1 completed task cleared, got %d", cleared)
+	}
+	tasks = store.GetTasks()
+	if len(tasks) != 1 || tasks[0].ID != taskA.ID {
+		t.Fatalf("expected only taskA to remain after ClearCompleted, got %+v", tasks)
+	}
+}
+

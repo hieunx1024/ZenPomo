@@ -125,15 +125,13 @@ func (c *Client) EnsureDaemon() error {
 		return nil
 	}
 
-	exe, err := os.Executable()
-	if err != nil {
-		exe = "zenpomo"
-	}
+	exe := core.GetExecutable()
 
 	cmd := exec.Command(exe, "daemon")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Stdin = nil
+	cmd.Env = os.Environ()
 	setDetachedProcess(cmd)
 
 	if err := cmd.Start(); err != nil {

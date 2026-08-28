@@ -1,7 +1,7 @@
-.PHONY: build test clean build-all build-linux build-windows install deb release-package
+.PHONY: build test clean build-all build-linux build-windows install deb release-package release-all
 
 BINARY_NAME=zenpomo
-VERSION=1.0.1
+VERSION=2.0.0
 BIN_DIR=bin
 DIST_DIR=dist
 INSTALL_DIR=$(HOME)/.local/bin
@@ -23,7 +23,7 @@ build-windows:
 	@echo "✓ Built Windows binary: $(BIN_DIR)/$(BINARY_NAME).exe"
 
 build-all: build-linux build-windows
-	@echo "✓ All binaries built successfully in $(BIN_DIR)/"
+	@echo "✓ Binaries built successfully in $(BIN_DIR)/"
 
 install: build-linux
 	@mkdir -p $(INSTALL_DIR) $(APP_DIR) $(AUTOSTART_DIR) $(ICON_DIR) $(PIXMAPS_DIR)
@@ -57,6 +57,15 @@ deb: build-linux
 	@dpkg-deb --build $(DIST_DIR)/deb-pkg $(DIST_DIR)/zenpomo_$(VERSION)_amd64.deb
 	@rm -rf $(DIST_DIR)/deb-pkg
 	@echo "✓ Built Debian/Ubuntu Package: $(DIST_DIR)/zenpomo_$(VERSION)_amd64.deb"
+
+release-all: build-all deb
+	@mkdir -p $(DIST_DIR)
+	@tar -czf $(DIST_DIR)/zenpomo_$(VERSION)_linux_amd64.tar.gz -C $(BIN_DIR) $(BINARY_NAME)
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$(VERSION)" -o $(DIST_DIR)/zenpomo-linux-arm64 main.go
+	@tar -czf $(DIST_DIR)/zenpomo_$(VERSION)_linux_arm64.tar.gz -C $(DIST_DIR) zenpomo-linux-arm64 && rm -f $(DIST_DIR)/zenpomo-linux-arm64
+	@zip -j $(DIST_DIR)/zenpomo_$(VERSION)_windows_amd64.zip $(BIN_DIR)/$(BINARY_NAME).exe
+	@cd $(DIST_DIR) && sha256sum * > checksums.txt 2>/dev/null || true
+	@echo "✓ Release artifacts generated in $(DIST_DIR)/"
 
 test:
 	go test -v ./...

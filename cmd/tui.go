@@ -40,7 +40,11 @@ func runTUI(mode ...app.InputMode) {
 	if len(mode) > 0 {
 		initialMode = mode[0]
 	}
-	p := tea.NewProgram(app.NewModel(initialMode), tea.WithAltScreen())
+	p := tea.NewProgram(
+		app.NewModel(initialMode),
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 		os.Exit(1)

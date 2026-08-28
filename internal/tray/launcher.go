@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
+	"zenpomo/internal/core"
 	"zenpomo/internal/daemon"
 )
 
@@ -19,37 +19,43 @@ var (
 	activeTuiCmd *exec.Cmd
 )
 
-// FocusOrLaunchTUI brings the existing TUI window to the front or launches a new single instance.
+// FocusOrLaunchTUI brings the existing TUI window to the front or launches a new instance.
 func FocusOrLaunchTUI() error {
 	tuiProcessMu.Lock()
 	defer tuiProcessMu.Unlock()
 
-	// If a TUI window is already running, focus it and NEVER spawn a duplicate
-	if _, running := findRunningTUIProcess(); running {
-		_ = focusExistingWindow()
+	client := daemon.NewClient()
+	_ = client.EnsureDaemon()
+
+	// 1. Notify running TUI to switch to Tab 1 (Timer)
+	_, _ = client.SendCommand(daemon.CmdRequestTimer)
+
+	// 2. Try focusing existing window if window manager tools (wmctrl/xdotool/PowerShell) are available
+	if focusExistingWindow() {
 		return nil
 	}
 
+	// 3. Launch a terminal window
 	return launchNewTUI("tui")
 }
 
-// FocusOrLaunchConfig opens the Config modal in the existing TUI or launches a new single TUI instance.
+// FocusOrLaunchConfig switches the existing TUI to Settings or launches a new instance.
 func FocusOrLaunchConfig() error {
 	tuiProcessMu.Lock()
 	defer tuiProcessMu.Unlock()
 
-	// 1. Send signal to daemon so any running TUI switches to Config mode in place
 	client := daemon.NewClient()
 	_ = client.EnsureDaemon()
+
+	// 1. Notify running TUI to switch to Tab 4 (Settings)
 	_, _ = client.SendCommand(daemon.CmdRequestConfig)
 
-	// 2. If a TUI window is already running, focus it and do not spawn a duplicate
-	if _, running := findRunningTUIProcess(); running {
-		_ = focusExistingWindow()
+	// 2. Try focusing existing window if window manager tools are available
+	if focusExistingWindow() {
 		return nil
 	}
 
-	// 3. If no TUI is open, spawn a new window directly in config mode
+	// 3. Launch a terminal window in config mode
 	return launchNewTUI("config")
 }
 
@@ -58,19 +64,18 @@ func LaunchOrToggleTUI() error {
 	tuiProcessMu.Lock()
 	defer tuiProcessMu.Unlock()
 
-	// If currently active and still running, close it (toggle behavior)
+	// If currently active child process is running, close it (toggle behavior)
 	if activeTuiCmd != nil && activeTuiCmd.Process != nil {
 		_ = activeTuiCmd.Process.Signal(syscall.SIGTERM)
 		activeTuiCmd = nil
 		return nil
 	}
 
-	// Check if any external TUI process is running
-	if pid, running := findRunningTUIProcess(); running {
-		if proc, err := os.FindProcess(pid); err == nil {
-			_ = proc.Signal(syscall.SIGTERM)
-			return nil
-		}
+	client := daemon.NewClient()
+	_ = client.EnsureDaemon()
+
+	if focusExistingWindow() {
+		return nil
 	}
 
 	return launchNewTUI("tui")
@@ -84,17 +89,20 @@ func focusExistingWindow() bool {
 }
 
 func focusLinux() bool {
-	// Try wmctrl first (X11 & XWayland)
+	// 1. Try wmctrl (X11 & XWayland)
 	if p, err := exec.LookPath("wmctrl"); err == nil {
-		if err := exec.Command(p, "-x", "-a", "ZenPomo").Run(); err == nil {
+		if exec.Command(p, "-x", "-a", "ZenPomo").Run() == nil {
 			return true
 		}
-		if err := exec.Command(p, "-a", "ZenPomo").Run(); err == nil {
+		if exec.Command(p, "-a", "ZenPomo").Run() == nil {
+			return true
+		}
+		if exec.Command(p, "-a", "zenpomo").Run() == nil {
 			return true
 		}
 	}
 
-	// Try xdotool
+	// 2. Try xdotool
 	if p, err := exec.LookPath("xdotool"); err == nil {
 		out, err := exec.Command(p, "search", "--name", "ZenPomo").Output()
 		if err == nil && len(bytes.TrimSpace(out)) > 0 {
@@ -119,101 +127,86 @@ func focusWindows() bool {
 	return false
 }
 
-func findRunningTUIProcess() (int, bool) {
-	currentPid := os.Getpid()
-
-	if runtime.GOOS == "linux" {
-		entries, err := os.ReadDir("/proc")
-		if err != nil {
-			return 0, false
-		}
-
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			pid, err := strconv.Atoi(entry.Name())
-			if err != nil || pid == currentPid {
-				continue
-			}
-
-			cmdlineBytes, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "cmdline"))
-			if err != nil {
-				continue
-			}
-
-			cmdline := string(bytes.ReplaceAll(cmdlineBytes, []byte{0}, []byte(" ")))
-			if (strings.Contains(cmdline, "zenpomo tui") || strings.Contains(cmdline, "zenpomo config") || (strings.Contains(cmdline, "zenpomo") && !strings.Contains(cmdline, "daemon") && !strings.Contains(cmdline, "tray") && !strings.Contains(cmdline, "status") && !strings.Contains(cmdline, "install") && !strings.Contains(cmdline, "autostart"))) && !strings.Contains(cmdline, "grep") {
-				return pid, true
-			}
-		}
-	}
-
-	return 0, false
-}
+var launchTUIFn = defaultLaunchTUI
 
 func launchNewTUI(appArgs ...string) error {
-	exe, err := os.Executable()
-	if err != nil {
-		exe = "zenpomo"
-	}
+	return launchTUIFn(appArgs...)
+}
+
+func defaultLaunchTUI(appArgs ...string) error {
+	exe := core.GetExecutable()
 
 	if len(appArgs) == 0 {
 		appArgs = []string{"tui"}
 	}
 
-	var cmd *exec.Cmd
-
 	if runtime.GOOS == "windows" {
-		winArgs := append([]string{"--title", "ZenPomo", "-w", "0", "new-tab", "--size", "76,22", exe}, appArgs...)
+		var cmd *exec.Cmd
+		winArgs := append([]string{"--title", "ZenPomo", "-w", "0", "new-tab", exe}, appArgs...)
 		if _, err := exec.LookPath("wt.exe"); err == nil {
 			cmd = exec.Command("wt.exe", winArgs...)
 		} else {
-			cmd = exec.Command("cmd.exe", "/c", "start", "ZenPomo", "mode", "con", "cols=76", "lines=22", "&&", exe, strings.Join(appArgs, " "))
+			cmd = exec.Command("cmd.exe", "/c", "start", "ZenPomo", exe, strings.Join(appArgs, " "))
 		}
-	} else {
-		// Prepare terminal command arguments
-		gnomeArgs := append([]string{"--class=ZenPomo", "--name=ZenPomo", "--title=ZenPomo", "--geometry=76x22", "--", exe}, appArgs...)
-		alacrittyArgs := append([]string{"--class", "ZenPomo,ZenPomo", "--title", "ZenPomo", "-o", "window.dimensions.columns=76", "-o", "window.dimensions.lines=22", "-e", exe}, appArgs...)
-		kittyArgs := append([]string{"--name", "ZenPomo", "--title", "ZenPomo", "-o", "initial_window_width=76c", "-o", "initial_window_height=22c", exe}, appArgs...)
-		genericArgs := append([]string{"-T", "ZenPomo", "-geometry", "76x22", "-e", exe}, appArgs...)
+		cmd.Env = os.Environ()
+		return cmd.Start()
+	}
 
-		terminals := []struct {
-			name string
-			args []string
-		}{
-			{"gnome-terminal", gnomeArgs},
-			{"alacritty", alacrittyArgs},
-			{"kitty", kittyArgs},
-			{"x-terminal-emulator", genericArgs},
-			{"xfce4-terminal", []string{"--title=ZenPomo", "--geometry=76x22", "-e", fmt.Sprintf("%s %s", exe, strings.Join(appArgs, " "))}},
-			{"konsole", append([]string{"-p", "tabtitle=ZenPomo", "-e", exe}, appArgs...)},
-			{"xterm", genericArgs},
-		}
+	// Linux / BSD Terminal Launchers
+	gnomeArgs := append([]string{"--window", "--title=ZenPomo", "--", exe}, appArgs...)
+	alacrittyArgs := append([]string{"--title", "ZenPomo", "-e", exe}, appArgs...)
+	kittyArgs := append([]string{"--title", "ZenPomo", exe}, appArgs...)
+	genericArgs := append([]string{"-T", "ZenPomo", "-e", exe}, appArgs...)
 
-		for _, t := range terminals {
-			if path, err := exec.LookPath(t.name); err == nil {
-				cmd = exec.Command(path, t.args...)
-				break
+	terminals := []struct {
+		name string
+		args []string
+	}{
+		{"gnome-terminal", gnomeArgs},
+		{"kgx", append([]string{"-e", exe}, appArgs...)},
+		{"ptyxis", append([]string{"--new-window", "--", exe}, appArgs...)},
+		{"alacritty", alacrittyArgs},
+		{"kitty", kittyArgs},
+		{"x-terminal-emulator", genericArgs},
+		{"xfce4-terminal", []string{"--title=ZenPomo", "-e", fmt.Sprintf("%s %s", exe, strings.Join(appArgs, " "))}},
+		{"konsole", append([]string{"--new-tab", "-p", "tabtitle=ZenPomo", "-e", exe}, appArgs...)},
+		{"xterm", genericArgs},
+	}
+
+	for _, t := range terminals {
+		if path, err := exec.LookPath(t.name); err == nil {
+			cmd := exec.Command(path, t.args...)
+			cmd.Env = os.Environ()
+			if err := cmd.Start(); err == nil {
+				activeTuiCmd = cmd
+				go func() {
+					_ = cmd.Wait()
+					tuiProcessMu.Lock()
+					activeTuiCmd = nil
+					tuiProcessMu.Unlock()
+				}()
+				return nil
 			}
 		}
+	}
 
-		if cmd == nil {
-			return fmt.Errorf("no supported terminal emulator found (install gnome-terminal)")
+	// Fallback to gtk-launch or gio launch
+	if p, err := exec.LookPath("gtk-launch"); err == nil {
+		cmd := exec.Command(p, "zenpomo")
+		cmd.Env = os.Environ()
+		if err := cmd.Start(); err == nil {
+			return nil
+		}
+	}
+	if p, err := exec.LookPath("gio"); err == nil {
+		home, _ := os.UserHomeDir()
+		desktopFile := filepath.Join(home, ".local", "share", "applications", "zenpomo.desktop")
+		cmd := exec.Command(p, "launch", desktopFile)
+		cmd.Env = os.Environ()
+		if err := cmd.Start(); err == nil {
+			return nil
 		}
 	}
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to launch TUI window: %w", err)
-	}
-
-	activeTuiCmd = cmd
-	go func() {
-		_ = cmd.Wait()
-		tuiProcessMu.Lock()
-		activeTuiCmd = nil
-		tuiProcessMu.Unlock()
-	}()
-
-	return nil
+	return fmt.Errorf("no supported terminal emulator found")
 }

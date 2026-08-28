@@ -20,7 +20,7 @@ const (
 	StatePaused  TimerState = "Paused"
 )
 
-// Config holds the customizable duration settings for pomodoro cycles.
+// Config holds the customizable duration and environment settings for pomodoro cycles.
 type Config struct {
 	WorkDuration       time.Duration `json:"work_duration"`
 	ShortBreakDuration time.Duration `json:"short_break_duration"`
@@ -30,6 +30,10 @@ type Config struct {
 	AutoStartWork      bool          `json:"auto_start_work"`
 	SoundEnabled       bool          `json:"sound_enabled"`
 	NotificationEnable bool          `json:"notification_enabled"`
+	Theme              string        `json:"theme"`         // gruvbox, catppuccin, tokyonight, nord, dracula, rosepine, monochrome
+	AmbientSound       string        `json:"ambient_sound"` // none, rain, whitenoise, waves, coffee
+	OnWorkStart        string        `json:"on_work_start"` // shell command executed when work session begins
+	OnBreakStart       string        `json:"on_break_start"`// shell command executed when break begins
 }
 
 // DefaultConfig returns clean, standard Pomodoro settings.
@@ -43,6 +47,10 @@ func DefaultConfig() Config {
 		AutoStartWork:      true,
 		SoundEnabled:       true,
 		NotificationEnable: true,
+		Theme:              "gruvbox",
+		AmbientSound:       "none",
+		OnWorkStart:        "",
+		OnBreakStart:       "",
 	}
 }
 

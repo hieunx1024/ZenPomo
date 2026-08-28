@@ -23,8 +23,9 @@ type Server struct {
 	store       *storage.Store
 	audio       *audio.Player
 	listener    net.Listener
-	stopChan    chan struct{}
-	pendingMode string
+	stopChan         chan struct{}
+	pendingMode      string
+	lastTUIHeartbeat time.Time
 }
 
 // NewServer creates a new daemon instance.
@@ -55,10 +56,18 @@ func NewServer() (*Server, error) {
 				notify.NotifySessionEnd(string(prev), string(next))
 			}
 			srv.store.IncrementPomo(snap.ActiveTaskTitle, int(currentCfg.WorkDuration.Minutes()))
+			// Trigger Break Hook
+			if currentCfg.OnBreakStart != "" {
+				core.ExecuteHook(currentCfg.OnBreakStart, next, snap.ActiveTaskTitle)
+			}
 		} else {
 			srv.audio.PlayBreakEnd()
 			if currentCfg.NotificationEnable {
 				notify.NotifySessionEnd(string(prev), string(next))
+			}
+			// Trigger Work Hook
+			if currentCfg.OnWorkStart != "" {
+				core.ExecuteHook(currentCfg.OnWorkStart, next, snap.ActiveTaskTitle)
 			}
 		}
 	})
@@ -77,7 +86,10 @@ func (s *Server) Start() error {
 	// 1-second ticker loop
 	go s.tickerLoop()
 
-	// Handle graceful shutdown signals
+	// Ignore SIGHUP so closing any terminal window never terminates the daemon
+	signal.Ignore(syscall.SIGHUP)
+
+	// Handle graceful shutdown signals (SIGINT, SIGTERM)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -161,9 +173,25 @@ func (s *Server) executeCommand(req Request) Response {
 		}
 	}
 
+	if req.Sender == "tui" {
+		s.lastTUIHeartbeat = time.Now()
+	}
+
 	switch req.Command {
+	case CmdIsTUIActive:
+		isActive := !s.lastTUIHeartbeat.IsZero() && time.Since(s.lastTUIHeartbeat) < 1500*time.Millisecond
+		return makeResp(isActive, "", "")
+
 	case CmdRequestConfig:
 		s.pendingMode = "config"
+		return makeResp(true, "", "")
+
+	case CmdRequestTimer:
+		s.pendingMode = "timer"
+		return makeResp(true, "", "")
+
+	case CmdSwitchTab:
+		s.pendingMode = req.Payload
 		return makeResp(true, "", "")
 
 	case CmdGetStatus, CmdPing:

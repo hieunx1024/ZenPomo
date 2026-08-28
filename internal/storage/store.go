@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"zenpomo/internal/core"
 )
 
-// Task represents a todo item with pomodoro count targets.
+// Task represents a todo item with pomodoro count targets and tags.
 type Task struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
+	Tags      []string  `json:"tags,omitempty"`
 	Target    int       `json:"target"`    // target pomodoros (e.g. 3)
 	Completed int       `json:"completed"` // pomodoros completed
 	IsDone    bool      `json:"is_done"`
@@ -86,6 +89,12 @@ func (s *Store) loadLocked() error {
 	if data.Stats == nil {
 		data.Stats = make(map[string]DailyStats)
 	}
+	if data.Config.Theme == "" {
+		data.Config.Theme = "gruvbox"
+	}
+	if data.Config.AmbientSound == "" {
+		data.Config.AmbientSound = "none"
+	}
 	s.data = data
 	return nil
 }
@@ -145,17 +154,55 @@ func (s *Store) GetTasks() []Task {
 	return res
 }
 
-// AddTask appends a new task to the queue.
-func (s *Store) AddTask(title string, target int) Task {
+// ParseTaskInput extracts tags (#tag) and target estimates (est:N or (N)) from user input.
+func ParseTaskInput(input string) (string, int, []string) {
+	words := strings.Fields(input)
+	var titleWords []string
+	var tags []string
+	target := 1
+
+	for _, w := range words {
+		if strings.HasPrefix(w, "#") && len(w) > 1 {
+			tags = append(tags, strings.ToLower(w[1:]))
+		} else if strings.HasPrefix(strings.ToLower(w), "est:") && len(w) > 4 {
+			if n, err := strconv.Atoi(w[4:]); err == nil && n > 0 && n <= 50 {
+				target = n
+			}
+		} else if strings.HasPrefix(w, "(") && strings.HasSuffix(w, ")") && len(w) > 2 {
+			if n, err := strconv.Atoi(w[1 : len(w)-1]); err == nil && n > 0 && n <= 50 {
+				target = n
+			}
+		} else {
+			titleWords = append(titleWords, w)
+		}
+	}
+
+	cleanTitle := strings.Join(titleWords, " ")
+	if cleanTitle == "" {
+		cleanTitle = input
+	}
+	return cleanTitle, target, tags
+}
+
+// AddTask appends a new task to the queue with automatic tag and target parsing.
+func (s *Store) AddTask(input string, defaultTarget int) Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_ = s.loadLocked()
+
+	cleanTitle, parsedTarget, tags := ParseTaskInput(input)
+	target := defaultTarget
+	if parsedTarget > 1 || target <= 0 {
+		target = parsedTarget
+	}
 	if target <= 0 {
 		target = 1
 	}
+
 	task := Task{
 		ID:        fmt.Sprintf("task-%d", time.Now().UnixNano()),
-		Title:     title,
+		Title:     cleanTitle,
+		Tags:      tags,
 		Target:    target,
 		Completed: 0,
 		IsDone:    false,
@@ -164,6 +211,71 @@ func (s *Store) AddTask(title string, target int) Task {
 	s.data.Tasks = append(s.data.Tasks, task)
 	_ = s.saveLocked()
 	return task
+}
+
+// EditTask modifies an existing task's title, target, and tags.
+func (s *Store) EditTask(id string, input string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
+
+	cleanTitle, parsedTarget, tags := ParseTaskInput(input)
+
+	for i := range s.data.Tasks {
+		if s.data.Tasks[i].ID == id {
+			s.data.Tasks[i].Title = cleanTitle
+			s.data.Tasks[i].Tags = tags
+			if parsedTarget > 0 {
+				s.data.Tasks[i].Target = parsedTarget
+			}
+			_ = s.saveLocked()
+			return true
+		}
+	}
+	return false
+}
+
+// ReorderTask moves a task from fromIndex to toIndex in the active uncompleted task queue.
+func (s *Store) ReorderTask(fromIndex, toIndex int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
+
+	if fromIndex < 0 || fromIndex >= len(s.data.Tasks) || toIndex < 0 || toIndex >= len(s.data.Tasks) || fromIndex == toIndex {
+		return false
+	}
+
+	task := s.data.Tasks[fromIndex]
+	s.data.Tasks = append(s.data.Tasks[:fromIndex], s.data.Tasks[fromIndex+1:]...)
+
+	var newTasks []Task
+	newTasks = append(newTasks, s.data.Tasks[:toIndex]...)
+	newTasks = append(newTasks, task)
+	newTasks = append(newTasks, s.data.Tasks[toIndex:]...)
+	s.data.Tasks = newTasks
+
+	_ = s.saveLocked()
+	return true
+}
+
+// ClearCompleted removes all completed tasks from the queue.
+func (s *Store) ClearCompleted() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
+
+	newList := make([]Task, 0, len(s.data.Tasks))
+	cleared := 0
+	for _, t := range s.data.Tasks {
+		if t.IsDone {
+			cleared++
+		} else {
+			newList = append(newList, t)
+		}
+	}
+	s.data.Tasks = newList
+	_ = s.saveLocked()
+	return cleared
 }
 
 // ToggleTask flips the completed status of a task.
@@ -244,6 +356,18 @@ func (s *Store) GetTodayStats() DailyStats {
 		return stat
 	}
 	return DailyStats{Date: today}
+}
+
+// GetAllStats returns a copy of all historical daily stats.
+func (s *Store) GetAllStats() map[string]DailyStats {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
+	res := make(map[string]DailyStats, len(s.data.Stats))
+	for k, v := range s.data.Stats {
+		res[k] = v
+	}
+	return res
 }
 
 // GetConfig returns a copy of the timer configuration.

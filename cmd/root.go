@@ -9,8 +9,9 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "zenpomo",
-	Short: "ZenPomo - Tactile Pomodoro TUI, System Tray & Widget",
+	Use:     "zenpomo",
+	Version: "2.0.0",
+	Short:   "ZenPomo - Tactile Pomodoro TUI, System Tray & Widget",
 	Long: `ZenPomo is a lightweight, distraction-free Pomodoro timer built with Go.
 It features a tactile Vim-navigated TUI, background daemon, System Tray integration,
 embedded local audio cues, and instant status outputs for Waybar, Tmux, and Taskbars.`,
