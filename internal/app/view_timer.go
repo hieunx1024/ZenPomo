@@ -59,18 +59,15 @@ func (m Model) renderTimerTab(contentWidth, termH int) string {
 			Render(fmt.Sprintf("[ %02d:%02d ]", mins, secs))
 	}
 
-	// Bottom Focus Info (Single-line 3-column layout without line wrapping)
+	// Bottom Focus Info: 3 chips that wrap onto their own lines (never mid-word) if the
+	// terminal is too narrow to fit them all on one line.
+	usable := boxContentWidth(contentWidth)
 	activeTask := m.snapshot.ActiveTaskTitle
 	if activeTask == "" {
 		activeTask = "General Focus"
 	}
-	maxTaskLen := contentWidth/3 - 4
-	if maxTaskLen < 10 {
-		maxTaskLen = 10
-	}
-	if len(activeTask) > maxTaskLen {
-		activeTask = activeTask[:maxTaskLen-3] + "..."
-	}
+	// A single chip should never eat the whole row on its own; cap it generously instead.
+	activeTask = truncateRunes(activeTask, usable/2)
 
 	soundStatus := "Off"
 	if m.snapshot.SoundEnabled {
@@ -83,12 +80,11 @@ func (m Model) renderTimerTab(contentWidth, termH int) string {
 	todayPomos := m.todayStats.CompletedPomos
 	focusMins := m.todayStats.FocusMinutes
 
-	metaCols := fmt.Sprintf("Task: %s   │   Sound: %s   │   Today: %d pomos (%dm)",
-		lipgloss.NewStyle().Bold(true).Foreground(m.theme.Accent).Render(activeTask),
-		lipgloss.NewStyle().Foreground(m.theme.TextDim).Render(soundStatus),
-		todayPomos,
-		focusMins,
-	)
+	metaCols := wrapItems([]string{
+		"Task: " + lipgloss.NewStyle().Bold(true).Foreground(m.theme.Accent).Render(activeTask),
+		"Sound: " + lipgloss.NewStyle().Foreground(m.theme.TextDim).Render(soundStatus),
+		fmt.Sprintf("Today: %d pomos (%dm)", todayPomos, focusMins),
+	}, usable, "   │   ")
 
 	dividerWidth := contentWidth - 6
 	if dividerWidth < 10 {

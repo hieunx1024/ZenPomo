@@ -1,14 +1,29 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"zenpomo/internal/storage"
 	"zenpomo/internal/theme"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// testModel builds a Model backed by an isolated, per-test store so these tests never read
+// from or write to the user's real ~/.config/zenpomo/data.json.
+func testModel(t *testing.T) Model {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "data.json")
+	store, err := storage.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to init isolated store: %v", err)
+	}
+	return newModelForTest(store)
+}
+
 func TestModelInitAndTabSwitch(t *testing.T) {
-	m := NewModel()
+	m := testModel(t)
 	if m.activeTab != TabTimer {
 		t.Errorf("Initial activeTab = %v; want %v (TabTimer)", m.activeTab, TabTimer)
 	}
@@ -43,7 +58,7 @@ func TestModelInitAndTabSwitch(t *testing.T) {
 }
 
 func TestZenModeToggle(t *testing.T) {
-	m := NewModel()
+	m := testModel(t)
 	if m.zenMode {
 		t.Errorf("Initial zenMode should be false")
 	}
@@ -64,7 +79,7 @@ func TestZenModeToggle(t *testing.T) {
 }
 
 func TestThemeCycling(t *testing.T) {
-	m := NewModel()
+	m := testModel(t)
 	initialTheme := m.config.Theme
 
 	// Press 't' to cycle theme
@@ -80,7 +95,7 @@ func TestThemeCycling(t *testing.T) {
 }
 
 func TestTasksTabOperations(t *testing.T) {
-	m := NewModel()
+	m := testModel(t)
 	// Switch to TabTasks
 	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
 	model := newM.(Model)
@@ -144,7 +159,12 @@ func TestTasksTabOperations(t *testing.T) {
 }
 
 func TestAnalyticsTabExport(t *testing.T) {
-	m := NewModel()
+	// The 'x' export writes to a fixed relative path in the process's working directory
+	// (see analytics.ExportMarkdown call in update.go); clean it up rather than leaving it
+	// behind in the repo.
+	t.Cleanup(func() { _ = os.Remove("zenpomo-stats.md") })
+
+	m := testModel(t)
 	// Switch to TabStats ('3')
 	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
 	model := newM.(Model)

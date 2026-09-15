@@ -54,19 +54,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
-			// Click near top header (Y <= 3) to switch tabs based on X position
-			if msg.Y <= 3 {
-				centerX := m.width / 2
-				offset := msg.X - (centerX - 35)
-				switch {
-				case offset >= 10 && offset < 22:
-					m.activeTab = TabTimer
-				case offset >= 22 && offset < 34:
-					m.activeTab = TabTasks
-				case offset >= 34 && offset < 50:
-					m.activeTab = TabStats
-				case offset >= 50 && offset < 66:
-					m.activeTab = TabSettings
+			// The header is always the first row of the last rendered frame; m.layout.top/left
+			// and m.tabBounds are recorded by renderHeader/View on every render, so this maps
+			// the click back to the exact tab column ranges that were actually drawn.
+			if m.layout != nil && m.tabBounds != nil && msg.Y == m.layout.top {
+				relX := msg.X - m.layout.left
+				for i, b := range m.tabBounds {
+					if relX >= b.StartX && relX < b.EndX {
+						m.activeTab = Tab(i)
+						m.zenMode = false
+						break
+					}
 				}
 				return m, nil
 			}
@@ -122,10 +120,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 3. Global Navigation Keys
+		// 3. Help Overlay (any key dismisses it, except Ctrl+C which always quits)
+		if m.showHelp {
+			switch msg.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			default:
+				m.showHelp = false
+				return m, nil
+			}
+		}
+
+		// 4. Global Navigation Keys
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+
+		case "?":
+			m.showHelp = true
+			return m, nil
 
 		case "1":
 			m.activeTab = TabTimer
@@ -170,7 +183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// 4. Tab-Specific Handlers
+		// 5. Tab-Specific Handlers
 		switch m.activeTab {
 		case TabTimer:
 			switch msg.String() {
@@ -331,11 +344,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 
+			case "v":
+				m.statsView = m.statsView.Next()
+				return m, nil
+
 			case "x":
 				summary := analytics.ComputeSummary(m.allStats, m.todayStats)
-				exportErr := analytics.ExportMarkdown("zenpomo-stats.md", summary, m.tasks)
+				exportErr := analytics.ExportMarkdown("zenpomo-stats.md", summary, m.tasks, m.allStats, m.todayStats)
 				if exportErr == nil {
 					m.statusMessage = "Report exported to zenpomo-stats.md"
+				} else {
+					m.statusMessage = "Export failed: " + exportErr.Error()
+				}
+				m.statusExpiry = time.Now().Add(4 * time.Second)
+				return m, nil
+
+			case "c":
+				exportErr := analytics.ExportCSV("zenpomo-stats.csv", m.allStats, m.todayStats)
+				if exportErr == nil {
+					m.statusMessage = "Data exported to zenpomo-stats.csv"
 				} else {
 					m.statusMessage = "Export failed: " + exportErr.Error()
 				}

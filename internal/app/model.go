@@ -21,6 +21,32 @@ const (
 	TabSettings
 )
 
+// StatsView selects the aggregation granularity shown on the Stats tab.
+type StatsView int
+
+const (
+	StatsViewDaily StatsView = iota
+	StatsViewWeekly
+	StatsViewMonthly
+)
+
+// Next cycles to the next stats view (Daily -> Weekly -> Monthly -> Daily).
+func (v StatsView) Next() StatsView {
+	return (v + 1) % 3
+}
+
+// Label returns the human-readable name of the stats view.
+func (v StatsView) Label() string {
+	switch v {
+	case StatsViewWeekly:
+		return "Weekly"
+	case StatsViewMonthly:
+		return "Monthly"
+	default:
+		return "Daily"
+	}
+}
+
 // InputMode indicates whether user is in normal navigation mode, adding a task, or editing a task.
 type InputMode int
 
@@ -31,10 +57,22 @@ const (
 	ModeConfig // For CLI backwards-compatibility
 )
 
-// TabBounds records the screen X-coordinates of each tab header button for mouse clicking.
+// TabBounds records the screen X-coordinates of each tab header button for mouse clicking,
+// relative to the start of the rendered header line (column 0 = first character of the header).
 type TabBounds struct {
 	StartX int
 	EndX   int
+}
+
+// layoutOffsets records where the last rendered frame placed the main view on screen, so mouse
+// events (given in absolute terminal coordinates) can be translated into frame-relative coordinates.
+//
+// Model is copied by value between View() and Update() calls (bubbletea semantics), but this
+// field holds a pointer, so both copies share the same backing struct: writes made during View()
+// are visible to Update() on the next input event.
+type layoutOffsets struct {
+	left int
+	top  int
 }
 
 // Model holds the entire TUI application state.
@@ -55,11 +93,13 @@ type Model struct {
 	inputMode         InputMode
 	textInput         textinput.Model
 	configCursor      int
-	tabBounds         [4]TabBounds
+	tabBounds         *[4]TabBounds
+	layout            *layoutOffsets
 	width             int
 	height            int
 	statusMessage     string
 	statusExpiry      time.Time
+	statsView         StatsView
 }
 
 // TickMsg is delivered periodically to poll/sync timer state.
@@ -71,9 +111,20 @@ func doTick() tea.Cmd {
 	})
 }
 
-// NewModel creates and initializes the TUI model with standard tab layout.
+// NewModel creates and initializes the TUI model with standard tab layout, backed by the
+// user's real config-dir store and background daemon.
 func NewModel(initialMode ...InputMode) Model {
 	store, _ := storage.NewStore()
+	return newModelWithStore(store, initialMode...)
+}
+
+// newModelForTest builds a Model against an isolated, caller-provided store so tests never
+// read from or write to the user's real ~/.config/zenpomo/data.json.
+func newModelForTest(store *storage.Store, initialMode ...InputMode) Model {
+	return newModelWithStore(store, initialMode...)
+}
+
+func newModelWithStore(store *storage.Store, initialMode ...InputMode) Model {
 	client := daemon.NewClient()
 	_ = client.EnsureDaemon()
 
@@ -130,6 +181,8 @@ func NewModel(initialMode ...InputMode) Model {
 		inputMode:     mode,
 		textInput:     ti,
 		configCursor:  0,
+		tabBounds:     &[4]TabBounds{},
+		layout:        &layoutOffsets{},
 		width:         80,
 		height:        24,
 	}

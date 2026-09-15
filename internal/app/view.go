@@ -31,7 +31,12 @@ func (m Model) View() string {
 		return m.renderTooSmallView(termW, termH)
 	}
 
-	// 2. Zen Mode View (Tab 1 only, pure minimalist clock)
+	// 2. Help Overlay (available from any tab, takes priority over everything but the size check)
+	if m.showHelp {
+		return m.renderHelpOverlay(termW, termH)
+	}
+
+	// 3. Zen Mode View (Tab 1 only, pure minimalist clock)
 	if m.zenMode && m.activeTab == TabTimer {
 		return m.renderZenModeView(termW, termH)
 	}
@@ -74,6 +79,21 @@ func (m Model) View() string {
 		footer,
 	)
 
+	// Record exactly where this frame places the main view on screen (same formula lipgloss.Place
+	// uses internally for Center/Center) so mouse clicks can be mapped back to header tab bounds.
+	if m.layout != nil {
+		left := (termW - lipgloss.Width(mainView)) / 2
+		if left < 0 {
+			left = 0
+		}
+		top := (termH - lipgloss.Height(mainView)) / 2
+		if top < 0 {
+			top = 0
+		}
+		m.layout.left = left
+		m.layout.top = top
+	}
+
 	return lipgloss.Place(
 		termW,
 		termH,
@@ -84,7 +104,10 @@ func (m Model) View() string {
 }
 
 // renderHeader renders the top navigation bar with 4 clickable tab buttons and session badge.
-func (m *Model) renderHeader(totalWidth int) string {
+// It also records each tab's clickable column range into m.tabBounds (if set), and always
+// returns a string of exactly totalWidth visible columns so it stays aligned with the rest of
+// the frame and so those recorded bounds stay meaningful.
+func (m Model) renderHeader(totalWidth int) string {
 	sessionColor := m.getSessionColor()
 
 	// Brand title
@@ -118,8 +141,6 @@ func (m *Model) renderHeader(totalWidth int) string {
 		}
 	}
 
-	tabBar := strings.Join(renderedTabs, "│")
-
 	// Session Status Badge
 	stateText := string(m.snapshot.State)
 	if m.snapshot.State == core.StateRunning {
@@ -145,22 +166,69 @@ func (m *Model) renderHeader(totalWidth int) string {
 		Background(sessionColor).
 		Padding(0, 1).
 		Render(badgeText)
-
-	// Available space calculation
-	leftPart := lipgloss.JoinHorizontal(lipgloss.Center, brand, " ", tabBar)
-	leftW := lipgloss.Width(leftPart)
 	badgeW := lipgloss.Width(sessionBadge)
+
+	// Lay out brand + tabs, tracking each tab's [start,end) column range as we go. Drop the
+	// brand tag first when it's too narrow to fit everything (small/split terminal panes),
+	// since the tab bar and session badge carry the essential information.
+	showBrand := true
+	leftW, tabBounds := layoutTabBar(brand, renderedTabs, showBrand)
+	if leftW+badgeW > totalWidth {
+		showBrand = false
+		leftW, tabBounds = layoutTabBar(brand, renderedTabs, showBrand)
+	}
+	if m.tabBounds != nil {
+		*m.tabBounds = tabBounds
+	}
+
+	var leftPart string
+	if showBrand {
+		leftPart = brand + " " + strings.Join(renderedTabs, "│")
+	} else {
+		leftPart = strings.Join(renderedTabs, "│")
+	}
+
 	space := totalWidth - leftW - badgeW
 	if space < 1 {
 		space = 1
 	}
 
-	return lipgloss.JoinHorizontal(
+	line := lipgloss.JoinHorizontal(
 		lipgloss.Center,
 		leftPart,
 		strings.Repeat(" ", space),
 		sessionBadge,
 	)
+
+	// Safety net: guarantee the header is always exactly totalWidth wide (pad if short,
+	// truncate if a very narrow terminal still can't fit everything) so it stays aligned
+	// with the box and footer below it, and so tabBounds above stay accurate. Note: this
+	// uses MaxWidth (hard truncate) rather than Style.Width, which would word-wrap an
+	// overlong line onto a second row instead of clipping it.
+	if lineWidth := lipgloss.Width(line); lineWidth > totalWidth {
+		line = lipgloss.NewStyle().MaxWidth(totalWidth).Render(line)
+	} else if lineWidth < totalWidth {
+		line += strings.Repeat(" ", totalWidth-lineWidth)
+	}
+	return line
+}
+
+// layoutTabBar computes the total rendered width of the brand+tab-bar segment and the
+// [start,end) column range of each of the 4 tabs within it, without the trailing session badge.
+func layoutTabBar(brand string, renderedTabs []string, showBrand bool) (totalWidth int, bounds [4]TabBounds) {
+	col := 0
+	if showBrand {
+		col = lipgloss.Width(brand) + 1 // brand + single space separator
+	}
+	for i, tab := range renderedTabs {
+		w := lipgloss.Width(tab)
+		bounds[i] = TabBounds{StartX: col, EndX: col + w}
+		col += w
+		if i < len(renderedTabs)-1 {
+			col++ // "│" separator
+		}
+	}
+	return col, bounds
 }
 
 // renderFooter renders quick action keybindings and status notifications.
@@ -176,8 +244,9 @@ func (m Model) renderFooter(width int) string {
 			fmt.Sprintf("%s %s", keyStyle.Render("[n]"), descStyle.Render("Next")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[r]"), descStyle.Render("Reset")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[z]"), descStyle.Render("Zen")),
-			fmt.Sprintf("%s %s", keyStyle.Render("[1-4]"), descStyle.Render("Tabs")),
+			fmt.Sprintf("%s %s", keyStyle.Render("[a]"), descStyle.Render("Add Task")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[t]"), descStyle.Render("Theme")),
+			fmt.Sprintf("%s %s", keyStyle.Render("[?]"), descStyle.Render("Help")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[q]"), descStyle.Render("Quit")),
 		}
 	case TabTasks:
@@ -189,14 +258,16 @@ func (m Model) renderFooter(width int) string {
 			fmt.Sprintf("%s %s", keyStyle.Render("[e]"), descStyle.Render("Edit")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[d]"), descStyle.Render("Done")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[x]"), descStyle.Render("Del")),
-			fmt.Sprintf("%s %s", keyStyle.Render("[1-4]"), descStyle.Render("Tabs")),
+			fmt.Sprintf("%s %s", keyStyle.Render("[C]"), descStyle.Render("Clear Done")),
+			fmt.Sprintf("%s %s", keyStyle.Render("[?]"), descStyle.Render("Help")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[q]"), descStyle.Render("Quit")),
 		}
 	case TabStats:
 		items = []string{
-			fmt.Sprintf("%s %s", keyStyle.Render("[x]"), descStyle.Render("Export")),
+			fmt.Sprintf("%s %s", keyStyle.Render("[v]"), descStyle.Render("View")),
+			fmt.Sprintf("%s %s", keyStyle.Render("[x]"), descStyle.Render("Export MD")),
+			fmt.Sprintf("%s %s", keyStyle.Render("[c]"), descStyle.Render("Export CSV")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[r]"), descStyle.Render("Refresh")),
-			fmt.Sprintf("%s %s", keyStyle.Render("[1-4]"), descStyle.Render("Tabs")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[t]"), descStyle.Render("Theme")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[?]"), descStyle.Render("Help")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[q]"), descStyle.Render("Quit")),
@@ -206,7 +277,7 @@ func (m Model) renderFooter(width int) string {
 			fmt.Sprintf("%s %s", keyStyle.Render("[j/k]"), descStyle.Render("Navigate")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[h/l]"), descStyle.Render("Change")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[Space]"), descStyle.Render("Toggle")),
-			fmt.Sprintf("%s %s", keyStyle.Render("[1-4]"), descStyle.Render("Tabs")),
+			fmt.Sprintf("%s %s", keyStyle.Render("[?]"), descStyle.Render("Help")),
 			fmt.Sprintf("%s %s", keyStyle.Render("[q]"), descStyle.Render("Quit")),
 		}
 	}
@@ -214,7 +285,39 @@ func (m Model) renderFooter(width int) string {
 	return lipgloss.NewStyle().
 		Width(width).
 		Align(lipgloss.Center).
-		Render(strings.Join(items, "  "))
+		Render(wrapItems(items, width, "  "))
+}
+
+// wrapItems joins hint/metric items with sep, wrapping onto additional lines at item
+// boundaries (never mid-item) so a row of chips never overflows or gets clipped mid-word on
+// narrower terminals.
+func wrapItems(items []string, width int, sep string) string {
+	sepWidth := lipgloss.Width(sep)
+
+	var lines []string
+	var current []string
+	currentWidth := 0
+
+	for _, item := range items {
+		itemWidth := lipgloss.Width(item)
+		addWidth := itemWidth
+		if len(current) > 0 {
+			addWidth += sepWidth
+		}
+		if len(current) > 0 && currentWidth+addWidth > width {
+			lines = append(lines, strings.Join(current, sep))
+			current = []string{item}
+			currentWidth = itemWidth
+		} else {
+			current = append(current, item)
+			currentWidth += addWidth
+		}
+	}
+	if len(current) > 0 {
+		lines = append(lines, strings.Join(current, sep))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // renderZenModeView renders the ultra-minimalist focus screen.
@@ -260,6 +363,65 @@ func (m Model) renderZenModeView(termW, termH int) string {
 	)
 }
 
+// renderHelpOverlay renders the full keybinding cheatsheet, grouped by tab context.
+func (m Model) renderHelpOverlay(termW, termH int) string {
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Accent)
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Text)
+	descStyle := lipgloss.NewStyle().Foreground(m.theme.TextDim)
+
+	row := func(key, desc string) string {
+		return fmt.Sprintf("  %-13s %s", keyStyle.Render(key), descStyle.Render(desc))
+	}
+
+	var content strings.Builder
+	content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(m.theme.Text).Render("ZENPOMO — KEYBINDINGS") + "\n\n")
+
+	content.WriteString(sectionStyle.Render("Global") + "\n")
+	content.WriteString(row("1-4 / Tab", "Switch tabs") + "\n")
+	content.WriteString(row("t", "Cycle color theme") + "\n")
+	content.WriteString(row("?", "Toggle this help") + "\n")
+	content.WriteString(row("q / Ctrl+C", "Quit (daemon keeps running)") + "\n\n")
+
+	content.WriteString(sectionStyle.Render("Timer") + "\n")
+	content.WriteString(row("Space", "Start / Pause") + "\n")
+	content.WriteString(row("n", "Skip to next session") + "\n")
+	content.WriteString(row("r", "Reset current session") + "\n")
+	content.WriteString(row("z", "Toggle Zen mode") + "\n")
+	content.WriteString(row("m", "Mute / unmute audio cues") + "\n")
+	content.WriteString(row("a", "Quick-add a task") + "\n\n")
+
+	content.WriteString(sectionStyle.Render("Tasks") + "\n")
+	content.WriteString(row("j/k", "Move selection") + "\n")
+	content.WriteString(row("J/K", "Reorder task in queue") + "\n")
+	content.WriteString(row("Space/Enter", "Set as active task") + "\n")
+	content.WriteString(row("a", "Add task") + "\n")
+	content.WriteString(row("e", "Edit task") + "\n")
+	content.WriteString(row("d", "Toggle done") + "\n")
+	content.WriteString(row("x", "Delete task") + "\n")
+	content.WriteString(row("C", "Clear completed") + "\n\n")
+
+	content.WriteString(sectionStyle.Render("Stats") + "\n")
+	content.WriteString(row("v", "Cycle Daily/Weekly/Monthly view") + "\n")
+	content.WriteString(row("x", "Export Markdown report") + "\n")
+	content.WriteString(row("c", "Export CSV") + "\n")
+	content.WriteString(row("r", "Refresh") + "\n\n")
+
+	content.WriteString(sectionStyle.Render("Settings") + "\n")
+	content.WriteString(row("j/k", "Navigate options") + "\n")
+	content.WriteString(row("h/l", "Change value") + "\n")
+	content.WriteString(row("Space", "Toggle option") + "\n\n")
+
+	content.WriteString(lipgloss.NewStyle().Foreground(m.theme.Border).Render("Press any key to close"))
+
+	boxWidth := 56
+	if boxWidth > termW-2 {
+		boxWidth = termW - 2
+	}
+	box := m.makeBox(boxWidth, 0, lipgloss.Left, content.String())
+
+	return lipgloss.Place(termW, termH, lipgloss.Center, lipgloss.Center, box)
+}
+
 // renderTooSmallView displays a polite message when terminal window is too constrained.
 func (m Model) renderTooSmallView(termW, termH int) string {
 	boxWidth := termW - 2
@@ -288,6 +450,49 @@ func (m Model) renderTooSmallView(termW, termH int) string {
 }
 
 // makeBox creates a themed rounded border box.
+// boxContentWidth returns how many visible columns of plain text fit on one line inside a
+// makeBox of the given total width, after its border and padding are accounted for.
+func boxContentWidth(totalWidth int) int {
+	w := totalWidth - 6
+	if w < 1 {
+		w = 1
+	}
+	return w
+}
+
+// truncateRunes trims s to at most n runes, replacing the tail with an ellipsis when it doesn't
+// fit. Operates on runes (not bytes), so it never splits a multi-byte UTF-8 character (e.g. a
+// Vietnamese task title) in the middle.
+func truncateRunes(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	if n == 1 {
+		return string(r[:1])
+	}
+	return string(r[:n-1]) + "…"
+}
+
+// padRunes right-pads s with spaces to exactly n runes wide. Use after truncateRunes so a
+// column always occupies exactly n columns, keeping rows aligned like a table.
+func padRunes(s string, n int) string {
+	l := len([]rune(s))
+	if l >= n {
+		return s
+	}
+	return s + strings.Repeat(" ", n-l)
+}
+
+// fitRunes truncates-or-pads s to exactly n runes, so it always occupies exactly one fixed-width
+// table column.
+func fitRunes(s string, n int) string {
+	return padRunes(truncateRunes(s, n), n)
+}
+
 func (m Model) makeBox(totalWidth, totalHeight int, align lipgloss.Position, content string) string {
 	if totalWidth < 10 {
 		totalWidth = 10

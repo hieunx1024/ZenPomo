@@ -50,6 +50,25 @@ func (m Model) renderSettingsTab(contentWidth, termH int) string {
 		{"Ambient Sound", fmt.Sprintf("[ %-10s ]", strings.Title(ambientDisplay)), "None, Rain, Whitenoise, Waves, Coffee"},
 	}
 
+	// Fixed-width columns (prefix/label/value) plus a hint column that fills whatever space is
+	// left and is truncated to fit, so a long hint (e.g. the theme list) can never wrap a row
+	// onto a second line and break alignment with the rows around it.
+	const valueColWidth = 16 // exactly fits the widest rendered value, e.g. "[ GRUVBOX      ]"
+	usable := boxContentWidth(contentWidth)
+	const prefixWidth = 2
+	const labelSep = 1
+	labelColWidth := 22
+	if maxLabel := usable - prefixWidth - labelSep - valueColWidth; maxLabel < labelColWidth {
+		labelColWidth = maxLabel // shrink the label column before ever letting a row overflow
+	}
+	if labelColWidth < 6 {
+		labelColWidth = 6
+	}
+	hintColWidth := usable - prefixWidth - labelColWidth - labelSep - valueColWidth - 3 // " (" + ")"
+	if hintColWidth < 0 {
+		hintColWidth = 0
+	}
+
 	for i, f := range fields {
 		prefix := "  "
 		style := lipgloss.NewStyle().Foreground(m.theme.Text)
@@ -58,12 +77,26 @@ func (m Model) renderSettingsTab(contentWidth, termH int) string {
 			style = cursorStyle
 		}
 
-		line := fmt.Sprintf("%s%-22s %-16s %s", prefix, f.label+":", f.value, dimStyle.Render("("+f.hint+")"))
+		hint := ""
+		if hintColWidth > 0 {
+			hint = " " + dimStyle.Render("("+truncateRunes(f.hint, hintColWidth)+")")
+		}
+		line := prefix + fitRunes(f.label+":", labelColWidth) + " " + fitRunes(f.value, valueColWidth) + hint
+
+		// Safety net: a styled value/hint substring could measure a hair wider than intended;
+		// clip rather than let the outer box word-wrap the row onto a second line.
+		if w := lipgloss.Width(line); w > usable {
+			line = lipgloss.NewStyle().MaxWidth(usable).Render(line)
+		}
 		content.WriteString(style.Render(line) + "\n")
 	}
 
 	content.WriteString("\n" + lipgloss.NewStyle().Foreground(m.theme.BorderActive).Render(strings.Repeat("-", contentWidth-6)) + "\n")
-	content.WriteString(dimStyle.Render("[j/k] Select setting   [h/l hoặc +/-] Adjust value   [Space/Enter] Toggle option"))
+	hints := []string{"[j/k] Select setting", "[h/l hoặc +/-] Adjust value", "[Space/Enter] Toggle option"}
+	for i, h := range hints {
+		hints[i] = dimStyle.Render(h)
+	}
+	content.WriteString(wrapItems(hints, usable, "   "))
 
 	return m.makeBox(contentWidth, calcHeight, lipgloss.Left, content.String())
 }

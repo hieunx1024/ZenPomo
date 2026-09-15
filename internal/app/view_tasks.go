@@ -25,10 +25,10 @@ func (m Model) renderTasksTab(contentWidth, termH int) string {
 	taskDoneStyle := lipgloss.NewStyle().
 		Foreground(m.theme.TextDim)
 
+	// Plain foreground (no padding/background chip): the tags column has a fixed width, and
+	// per-tag padding would push the total row width past that budget and break alignment.
 	tagStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Highlight).
-		Background(m.theme.TabActiveBg).
-		Padding(0, 1)
+		Foreground(m.theme.Highlight)
 
 	var content strings.Builder
 	content.WriteString(headerStyle.Render("TASKS (Vim Mode)") + "\n\n")
@@ -57,64 +57,96 @@ func (m Model) renderTasksTab(contentWidth, termH int) string {
 				cursor = "> "
 			}
 
+			isActiveTask := !t.IsDone && t.Title == m.snapshot.ActiveTaskTitle
+
 			statusIcon := "[ ]"
 			if t.IsDone {
 				statusIcon = "[x]"
-			} else if t.Title == m.snapshot.ActiveTaskTitle {
+			} else if isActiveTask {
 				statusIcon = "[*]"
 			}
 
-			// Estimation dots: e.g. [●●○] (2/3)
-			var estIcons strings.Builder
-			for p := 1; p <= t.Target; p++ {
-				if p <= t.Completed {
-					estIcons.WriteString("●")
-				} else {
-					estIcons.WriteString("○")
+			// Fixed-width columns so every row occupies exactly one line and lines up like a
+			// table, regardless of title/tag length or how large a task's pomo target is.
+			const progressColWidth = 15
+			const tagsColWidth = 18
+			usable := boxContentWidth(contentWidth)
+			// cursor(2) + icon(3) + spacing(2, before progress and before title) + progress column
+			baseOverhead := 2 + 3 + 2 + progressColWidth
+			showTagsCol := usable-baseOverhead-1-tagsColWidth >= 10
+			titleColWidth := usable - baseOverhead
+			if showTagsCol {
+				titleColWidth -= 1 + tagsColWidth // extra separator + the tags column itself
+			}
+			if titleColWidth < 6 {
+				titleColWidth = 6
+			}
+
+			// Progress column: dot icons only for small targets, otherwise a plain "n/m"
+			// fraction — a target of 50 would otherwise render 50 dots and blow out the row.
+			var progressText string
+			if t.Target <= 8 {
+				var dots strings.Builder
+				for p := 1; p <= t.Target; p++ {
+					if p <= t.Completed {
+						dots.WriteString("●")
+					} else {
+						dots.WriteString("○")
+					}
 				}
-			}
-			estStr := fmt.Sprintf("[%s] (%d/%d)", estIcons.String(), t.Completed, t.Target)
-
-			// Render Tags
-			var renderedTags string
-			if len(t.Tags) > 0 {
-				var tagPills []string
-				for _, tag := range t.Tags {
-					tagPills = append(tagPills, tagStyle.Render("#"+tag))
-				}
-				renderedTags = " " + strings.Join(tagPills, " ")
-			}
-
-			title := t.Title
-			maxTitleLen := contentWidth - 42
-			if maxTitleLen > 10 && len(title) > maxTitleLen {
-				title = title[:maxTitleLen-3] + "..."
-			}
-
-			line := fmt.Sprintf("%s%s %-26s %s %s", cursor, statusIcon, title, renderedTags, estStr)
-			if t.Title == m.snapshot.ActiveTaskTitle && !t.IsDone {
-				line += " " + lipgloss.NewStyle().Bold(true).Foreground(m.theme.Accent).Render("*ACTIVE*")
-			}
-
-			if t.IsDone {
-				content.WriteString(taskDoneStyle.Render(line) + "\n")
-			} else if i == m.selectedTask {
-				content.WriteString(taskActiveStyle.Render(line) + "\n")
+				progressText = fmt.Sprintf("[%s](%d/%d)", dots.String(), t.Completed, t.Target)
 			} else {
+				progressText = fmt.Sprintf("(%d/%d)", t.Completed, t.Target)
+			}
+
+			tagsText := ""
+			if len(t.Tags) > 0 {
+				var withHash []string
+				for _, tag := range t.Tags {
+					withHash = append(withHash, "#"+tag)
+				}
+				tagsText = strings.Join(withHash, " ")
+			}
+
+			line := cursor + statusIcon + " " + fitRunes(t.Title, titleColWidth)
+			if showTagsCol {
+				line += " " + tagStyle.Render(fitRunes(tagsText, tagsColWidth))
+			}
+			line += " " + fitRunes(progressText, progressColWidth)
+
+			// Guarantee the row is exactly `usable` columns even if a styled tag pill's
+			// background color padding nudged the width — never let a row wrap.
+			if w := lipgloss.Width(line); w > usable {
+				line = lipgloss.NewStyle().MaxWidth(usable).Render(line)
+			}
+
+			switch {
+			case t.IsDone:
+				content.WriteString(taskDoneStyle.Render(line) + "\n")
+			case i == m.selectedTask || isActiveTask:
+				content.WriteString(taskActiveStyle.Render(line) + "\n")
+			default:
 				content.WriteString(lipgloss.NewStyle().Foreground(m.theme.Text).Render(line) + "\n")
 			}
 		}
 	}
 
+	usableBottom := boxContentWidth(contentWidth)
 	if m.inputMode == ModeAddingTask {
 		content.WriteString("\n" + lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true).Render("Add Task: ") + m.textInput.View())
-		content.WriteString("\n" + lipgloss.NewStyle().Foreground(m.theme.TextDim).Render("Tip: include tags and estimates, e.g. Refactor API #backend est:3  [Enter/Esc]"))
+		tip := truncateRunes("Tip: include tags and estimates, e.g. Refactor API #backend est:3  [Enter/Esc]", usableBottom)
+		content.WriteString("\n" + lipgloss.NewStyle().Foreground(m.theme.TextDim).Render(tip))
 	} else if m.inputMode == ModeEditingTask {
 		content.WriteString("\n" + lipgloss.NewStyle().Foreground(m.theme.Highlight).Bold(true).Render("Edit Task: ") + m.textInput.View())
-		content.WriteString("\n" + lipgloss.NewStyle().Foreground(m.theme.TextDim).Render("Edit title, tags (#tag), or estimates (est:N)  [Enter/Esc]"))
+		tip := truncateRunes("Edit title, tags (#tag), or estimates (est:N)  [Enter/Esc]", usableBottom)
+		content.WriteString("\n" + lipgloss.NewStyle().Foreground(m.theme.TextDim).Render(tip))
 	} else {
 		content.WriteString("\n" + lipgloss.NewStyle().Foreground(m.theme.BorderActive).Render(strings.Repeat("-", contentWidth-6)) + "\n")
-		content.WriteString(lipgloss.NewStyle().Foreground(m.theme.TextDim).Render("[j/k] Navigate   [J/K] Reorder   [Space] Set Active   [a] Add   [e] Edit   [d] Done   [x] Del   [C] Clear Done"))
+		hints := []string{"[j/k] Navigate", "[J/K] Reorder", "[Space] Set Active", "[a] Add", "[e] Edit", "[d] Done", "[x] Del", "[C] Clear Done"}
+		for i, h := range hints {
+			hints[i] = lipgloss.NewStyle().Foreground(m.theme.TextDim).Render(h)
+		}
+		content.WriteString(wrapItems(hints, usableBottom, "   "))
 	}
 
 	return m.makeBox(contentWidth, calcHeight, lipgloss.Left, content.String())
