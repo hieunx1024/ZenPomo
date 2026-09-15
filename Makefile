@@ -1,7 +1,7 @@
 .PHONY: build test clean build-all build-linux build-windows install deb release-package release-all
 
 BINARY_NAME=zenpomo
-VERSION=2.0.0
+VERSION=2.1.0
 BIN_DIR=bin
 DIST_DIR=dist
 INSTALL_DIR=$(HOME)/.local/bin
