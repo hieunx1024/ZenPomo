@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -43,6 +44,39 @@ func TestStore_CRUD(t *testing.T) {
 	store.DeleteTask(task.ID)
 	if len(store.GetTasks()) != 0 {
 		t.Fatalf("expected 0 tasks after delete")
+	}
+}
+
+func TestStore_ExportJSON(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "zenpomo-export-json-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "data.json")
+	store, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+	store.AddTask("Backup me", 1)
+
+	backupPath := filepath.Join(tmpDir, "backup.json")
+	if err := store.ExportJSON(backupPath); err != nil {
+		t.Fatalf("ExportJSON failed: %v", err)
+	}
+
+	b, err := os.ReadFile(backupPath)
+	if err != nil {
+		t.Fatalf("failed to read backup file: %v", err)
+	}
+
+	var data StoreData
+	if err := json.Unmarshal(b, &data); err != nil {
+		t.Fatalf("backup file is not valid JSON: %v", err)
+	}
+	if len(data.Tasks) != 1 || data.Tasks[0].Title != "Backup me" {
+		t.Fatalf("backup missing expected task data: %+v", data.Tasks)
 	}
 }
 

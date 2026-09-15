@@ -93,6 +93,17 @@ zenpomo stop        # Dừng hoàn toàn tiến trình ngầm
 zenpomo toggle      # Bật / ẩn nhanh cửa sổ TUI
 ```
 
+### Xuất dữ liệu
+
+```bash
+zenpomo export --format csv                  # Thống kê tập trung theo ngày -> zenpomo-stats.csv
+zenpomo export --format md                    # Báo cáo đầy đủ (tổng quan, theo tuần/tháng, danh sách task) -> zenpomo-stats.md
+zenpomo export --format json                  # Sao lưu toàn bộ dữ liệu (config, task, thống kê) -> zenpomo-backup.json
+zenpomo export --format csv --output ~/report.csv   # Chỉ định đường dẫn xuất file
+```
+
+Trong tab **Stats** của TUI, nhấn `v` để chuyển đổi giữa xem theo Ngày / Tuần / Tháng, `x` để xuất báo cáo Markdown, và `c` để xuất CSV.
+
 ### Tích hợp Waybar / Polybar / Tmux
 
 Lệnh `zenpomo status` cho phép các thanh trạng thái đọc dữ liệu đếm giờ theo thời gian thực:
@@ -141,6 +152,7 @@ zenpomo autostart status     # Kiểm tra trạng thái
 | `j` / `↓` | Di chuyển xuống công việc bên dưới |
 | `k` / `↑` | Di chuyển lên công việc bên trên |
 | `m` | Bật / Tắt âm thanh thông báo |
+| `?` | Xem toàn bộ danh sách phím tắt (nhấn phím bất kỳ để đóng) |
 | `q` / `Ctrl+C` | Đóng TUI (bộ đếm và khay hệ thống vẫn chạy ngầm) |
 
 ---

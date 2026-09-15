@@ -113,8 +113,110 @@ func ComputeSummary(stats map[string]storage.DailyStats, todayStats storage.Dail
 	return summary
 }
 
+// PeriodStat holds aggregated focus metrics for a week or month bucket.
+type PeriodStat struct {
+	Label          string // e.g. "09/08-09/14" for a week, "2026-09" for a month
+	FocusMinutes   int
+	CompletedPomos int
+	CompletedTasks int
+}
+
+func mergeStats(stats map[string]storage.DailyStats, todayStats storage.DailyStats) map[string]storage.DailyStats {
+	merged := make(map[string]storage.DailyStats, len(stats)+1)
+	for k, v := range stats {
+		merged[k] = v
+	}
+	if todayStats.Date != "" {
+		merged[todayStats.Date] = todayStats
+	}
+	return merged
+}
+
+// weekStartMonday returns the Monday 00:00 of the week containing t.
+func weekStartMonday(t time.Time) time.Time {
+	t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	wd := int(t.Weekday())
+	if wd == 0 {
+		wd = 7 // treat Sunday as day 7 so weeks start on Monday
+	}
+	return t.AddDate(0, 0, -(wd - 1))
+}
+
+// ComputeWeeklyStats aggregates daily stats into Monday-start week buckets,
+// returning the most recent `weeks` weeks in chronological order.
+func ComputeWeeklyStats(stats map[string]storage.DailyStats, todayStats storage.DailyStats, weeks int) []PeriodStat {
+	merged := mergeStats(stats, todayStats)
+	now := time.Now()
+	currentWeekStart := weekStartMonday(now)
+
+	result := make([]PeriodStat, 0, weeks)
+	for i := weeks - 1; i >= 0; i-- {
+		weekStart := currentWeekStart.AddDate(0, 0, -7*i)
+		weekEnd := weekStart.AddDate(0, 0, 6)
+
+		p := PeriodStat{Label: fmt.Sprintf("%s-%s", weekStart.Format("01/02"), weekEnd.Format("01/02"))}
+		for d := weekStart; !d.After(weekEnd); d = d.AddDate(0, 0, 1) {
+			if s, ok := merged[d.Format("2006-01-02")]; ok {
+				p.FocusMinutes += s.FocusMinutes
+				p.CompletedPomos += s.CompletedPomos
+				p.CompletedTasks += s.CompletedTasks
+			}
+		}
+		result = append(result, p)
+	}
+	return result
+}
+
+// ComputeMonthlyStats aggregates daily stats into calendar-month buckets,
+// returning the most recent `months` months in chronological order.
+func ComputeMonthlyStats(stats map[string]storage.DailyStats, todayStats storage.DailyStats, months int) []PeriodStat {
+	merged := mergeStats(stats, todayStats)
+	now := time.Now()
+	currentMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	result := make([]PeriodStat, 0, months)
+	for i := months - 1; i >= 0; i-- {
+		monthStart := currentMonth.AddDate(0, -i, 0)
+		p := PeriodStat{Label: monthStart.Format("2006-01")}
+		for dStr, s := range merged {
+			d, err := time.Parse("2006-01-02", dStr)
+			if err != nil {
+				continue
+			}
+			if d.Year() == monthStart.Year() && d.Month() == monthStart.Month() {
+				p.FocusMinutes += s.FocusMinutes
+				p.CompletedPomos += s.CompletedPomos
+				p.CompletedTasks += s.CompletedTasks
+			}
+		}
+		result = append(result, p)
+	}
+	return result
+}
+
+// ExportCSV writes daily stats history as a spreadsheet-friendly CSV file.
+func ExportCSV(targetPath string, stats map[string]storage.DailyStats, todayStats storage.DailyStats) error {
+	merged := mergeStats(stats, todayStats)
+
+	dates := make([]string, 0, len(merged))
+	for d := range merged {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	var sb strings.Builder
+	sb.WriteString("date,focus_minutes,completed_pomos,completed_tasks\n")
+	for _, d := range dates {
+		s := merged[d]
+		sb.WriteString(fmt.Sprintf("%s,%d,%d,%d\n", d, s.FocusMinutes, s.CompletedPomos, s.CompletedTasks))
+	}
+
+	return os.WriteFile(targetPath, []byte(sb.String()), 0644)
+}
+
 // ExportMarkdown generates a Markdown report formatted for Obsidian, Notion, or local storage.
-func ExportMarkdown(targetPath string, summary Summary, tasks []storage.Task) error {
+// dailyStats/todayStats are used to additionally break down focus time by week and month.
+func ExportMarkdown(targetPath string, summary Summary, tasks []storage.Task, dailyStats map[string]storage.DailyStats, todayStats storage.DailyStats) error {
 	var sb strings.Builder
 	now := time.Now().Format("2006-01-02 15:04:05")
 
@@ -136,6 +238,22 @@ func ExportMarkdown(targetPath string, summary Summary, tasks []storage.Task) er
 	sb.WriteString("| :--- | :--- | :--- | :--- |\n")
 	for _, day := range summary.RecentDays {
 		sb.WriteString(fmt.Sprintf("| %s | %d min | %d pomos | %d |\n", day.Date, day.FocusMinutes, day.CompletedPomos, day.CompletedTasks))
+	}
+	sb.WriteString("\n")
+
+	sb.WriteString("## Weekly Activity (Last 8 Weeks)\n\n")
+	sb.WriteString("| Week | Focus Time | Pomodoros | Tasks Done |\n")
+	sb.WriteString("| :--- | :--- | :--- | :--- |\n")
+	for _, wk := range ComputeWeeklyStats(dailyStats, todayStats, 8) {
+		sb.WriteString(fmt.Sprintf("| %s | %d min | %d pomos | %d |\n", wk.Label, wk.FocusMinutes, wk.CompletedPomos, wk.CompletedTasks))
+	}
+	sb.WriteString("\n")
+
+	sb.WriteString("## Monthly Activity (Last 6 Months)\n\n")
+	sb.WriteString("| Month | Focus Time | Pomodoros | Tasks Done |\n")
+	sb.WriteString("| :--- | :--- | :--- | :--- |\n")
+	for _, mo := range ComputeMonthlyStats(dailyStats, todayStats, 6) {
+		sb.WriteString(fmt.Sprintf("| %s | %d min | %d pomos | %d |\n", mo.Label, mo.FocusMinutes, mo.CompletedPomos, mo.CompletedTasks))
 	}
 	sb.WriteString("\n")
 

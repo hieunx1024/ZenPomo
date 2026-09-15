@@ -370,6 +370,19 @@ func (s *Store) GetAllStats() map[string]DailyStats {
 	return res
 }
 
+// ExportJSON writes a full backup (config, tasks, and daily stats) to targetPath.
+func (s *Store) ExportJSON(targetPath string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.loadLocked()
+
+	b, err := json.MarshalIndent(s.data, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(targetPath, b, 0644)
+}
+
 // GetConfig returns a copy of the timer configuration.
 func (s *Store) GetConfig() core.Config {
 	s.mu.Lock()

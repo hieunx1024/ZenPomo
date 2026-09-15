@@ -93,6 +93,17 @@ zenpomo stop        # Stop background daemon completely
 zenpomo toggle      # Toggle (show/hide) the TUI window
 ```
 
+### Exporting Your Data
+
+```bash
+zenpomo export --format csv                  # Daily focus stats -> zenpomo-stats.csv
+zenpomo export --format md                    # Full report (overview, weekly/monthly breakdown, tasks) -> zenpomo-stats.md
+zenpomo export --format json                  # Full raw backup of config, tasks and stats -> zenpomo-backup.json
+zenpomo export --format csv --output ~/report.csv   # Custom output path
+```
+
+Inside the TUI's **Stats** tab you can also press `v` to cycle between Daily / Weekly / Monthly views, `x` to export the Markdown report, and `c` to export the CSV.
+
 ### Waybar / Polybar / Tmux Integration
 
 Use `zenpomo status` to output live countdown data:
@@ -141,6 +152,7 @@ zenpomo autostart status     # Check autostart status
 | `j` / `↓` | Move selection down |
 | `k` / `↑` | Move selection up |
 | `m` | Toggle audio cues (Mute / Unmute) |
+| `?` | Show the full keybinding cheatsheet (any key closes it) |
 | `q` / `Ctrl+C` | Close TUI (daemon and tray continue running) |
 
 ---
