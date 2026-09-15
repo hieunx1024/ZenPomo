@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"zenpomo/internal/core"
 	"zenpomo/internal/daemon"
+	"zenpomo/internal/notify"
 )
 
 var (
@@ -34,7 +35,7 @@ func FocusOrLaunchTUI() error {
 	// duplicate window — just try to bring the existing one to front. It will also self-switch
 	// to the Timer tab on its next tick, picking up the pending-mode request sent above.
 	if isActive, err := client.SendCommand(daemon.CmdIsTUIActive); err == nil && isActive.Success {
-		focusExistingWindow()
+		notifyIfCannotFocus()
 		return nil
 	}
 
@@ -44,6 +45,17 @@ func FocusOrLaunchTUI() error {
 	}
 
 	return launchNewTUI("tui")
+}
+
+// notifyIfCannotFocus tries to bring an already-open TUI window to the front, and — since this
+// system has no wmctrl/xdotool (or the window manager otherwise blocks focus-stealing from a
+// background process, common on Wayland) — falls back to a desktop notification so clicking
+// "Open TUI" never silently does nothing when a window is, in fact, already open somewhere.
+func notifyIfCannotFocus() {
+	if focusExistingWindow() {
+		return
+	}
+	notify.Send("ZenPomo", "ZenPomo is already open — check your other windows or workspaces.")
 }
 
 // FocusOrLaunchConfig switches the existing TUI to Settings or launches a new instance.
@@ -59,7 +71,7 @@ func FocusOrLaunchConfig() error {
 
 	// 2. Skip spawning a duplicate window if a TUI is already open; see FocusOrLaunchTUI above.
 	if isActive, err := client.SendCommand(daemon.CmdIsTUIActive); err == nil && isActive.Success {
-		focusExistingWindow()
+		notifyIfCannotFocus()
 		return nil
 	}
 
@@ -90,7 +102,7 @@ func LaunchOrToggleTUI() error {
 	// already exited even though the window persists) still counts as "open" — don't spawn a
 	// second one on top of it just because activeTuiCmd lost track of it.
 	if isActive, err := client.SendCommand(daemon.CmdIsTUIActive); err == nil && isActive.Success {
-		focusExistingWindow()
+		notifyIfCannotFocus()
 		return nil
 	}
 
