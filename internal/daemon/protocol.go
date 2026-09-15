@@ -23,6 +23,7 @@ const (
 	CmdRequestTimer  = "REQUEST_TIMER"
 	CmdSwitchTab     = "SWITCH_TAB"
 	CmdIsTUIActive   = "IS_TUI_ACTIVE"
+	CmdTUIDisconnect = "TUI_DISCONNECT"
 	CmdPing          = "PING"
 	CmdStop          = "STOP"
 )

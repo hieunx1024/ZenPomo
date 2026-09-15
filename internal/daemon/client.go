@@ -137,6 +137,9 @@ func (c *Client) EnsureDaemon() error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start background daemon: %w", err)
 	}
+	// Reap the child once it exits (e.g. it lost a startup race against another daemon and
+	// exited immediately — see listenIPC) so it doesn't linger as a zombie forever.
+	go func() { _ = cmd.Wait() }()
 
 	// Wait up to 2 seconds for daemon to initialize socket
 	for i := 0; i < 20; i++ {

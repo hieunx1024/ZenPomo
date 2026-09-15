@@ -182,6 +182,14 @@ func (s *Server) executeCommand(req Request) Response {
 		isActive := !s.lastTUIHeartbeat.IsZero() && time.Since(s.lastTUIHeartbeat) < 1500*time.Millisecond
 		return makeResp(isActive, "", "")
 
+	case CmdTUIDisconnect:
+		// A TUI reports itself gone (window closed / process exiting) instead of the daemon
+		// waiting for its heartbeat to go stale. Without this, closing a TUI and immediately
+		// clicking "Open TUI" in the tray again — well within the passive timeout — makes
+		// FocusOrLaunchTUI think one is still active and silently skip launching a new window.
+		s.lastTUIHeartbeat = time.Time{}
+		return makeResp(true, "", "")
+
 	case CmdRequestConfig:
 		s.pendingMode = "config"
 		return makeResp(true, "", "")

@@ -78,5 +78,8 @@ func EnsureTray() {
 
 	daemon.SetDetachedProcess(cmd)
 
-	_ = cmd.Start()
+	if err := cmd.Start(); err == nil {
+		// Reap once it exits so a lost startup race doesn't leave a zombie behind.
+		go func() { _ = cmd.Wait() }()
+	}
 }
